@@ -249,8 +249,14 @@ def process_analysis(item_id, deep_scan_enabled, force_scrape=False, progress_ca
             except: pass
 
         if inv:
-            if progress_callback: progress_callback("👥 Analyzing Minifigures...")
+            num_figs = len(inv)
+            if progress_callback: progress_callback(f"👥 Analyzing {num_figs} Minifigures...")
+            
             for idx, fig in enumerate(inv):
+                # Progress Update
+                if progress_callback: 
+                    progress_callback(f"👥 Analyzing Minifigures... ({idx+1}/{num_figs}): {fig['name'][:20]}...")
+
                 # Get fig data
                 fd = db.get_item(fig['id'])
                 
