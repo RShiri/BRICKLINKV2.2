@@ -607,7 +607,7 @@ if mode == "📊 Portfolio Manager":
             st.cache_data.clear()
             st.rerun()
 
-elif mode == "🎯 Sniper Chat":
+elif mode == "🔎 Set Analyzer":
     st.title("🔎 Set Analyzer")
     
     with st.expander("ℹ️ How to Use", expanded=False):
