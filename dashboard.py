@@ -463,11 +463,11 @@ def load_data():
     return pd.DataFrame(sets), pd.DataFrame(figs)
 
 # --- SIDEBAR NAV ---
-mode = st.sidebar.radio("Navigation", ["🎯 Sniper Chat", "📊 Portfolio Manager"], index=0)
+mode = st.sidebar.radio("Navigation", ["🔎 Set Analyzer", "📊 Portfolio Manager"], index=0)
 mobile_view = st.sidebar.checkbox("📱 Mobile View", value=False)
 st.sidebar.divider()
 
-if mode == "🎯 Sniper Chat":
+if mode == "🔎 Set Analyzer":
     deep_scan = st.sidebar.checkbox("Enable Deep Scan (Fix Zero Prices)", value=True, help="Force re-scrape for items with 0.00 price.")
     
     if st.sidebar.button("🔄 Reset Scraper Engine"):
@@ -608,9 +608,22 @@ if mode == "📊 Portfolio Manager":
             st.rerun()
 
 elif mode == "🎯 Sniper Chat":
-    st.title("🎯 Sniper Chat")
-    st.caption("Enter one or more Set IDs (separated by spaces or commas) to analyze.")
-
+    st.title("🔎 Set Analyzer")
+    
+    with st.expander("ℹ️ How to Use", expanded=False):
+        st.markdown("""
+        **Welcome to the Set Analyzer!**  
+        Type one or more IDs below to get real-time market data from BrickLink.
+        
+        **Examples:**
+        - **Sets**: `75001` (Republic Troopers), `10333` (Barad-dûr)
+        - **Minifigures**: `sw0450` (Captain Rex), `sh0232` (Man-Bat)
+        - **Batch Search**: `75001 75002 sw0001` (Space separated)
+        - **Force Refresh**: `75001 force` (Ignores cache)
+        
+        *Tip: Check 'Mobile View' in the sidebar for a better phone experience!*
+        """)
+    
     # Initialize chat history
     if "messages" not in st.session_state:
         st.session_state.messages = [{"role": "assistant", "content": "Hello! Enter Set IDs (e.g., '75001 75002')."}]
