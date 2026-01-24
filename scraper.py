@@ -149,16 +149,25 @@ class BrickLinkScraper:
             try:
                 WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CLASS_NAME, "pcipgInnerTable")))
                 
-                # Wait for AJAX data (real currency or tilde)
+                # Wait for AJAX data
                 WebDriverWait(driver, 10).until(
                     lambda d: "ils" in d.page_source.lower() or "~" in d.page_source
                 )
             except:
                 # Check for "Not Found" indicators
                 src = driver.page_source.lower()
-                if "item not found" in src or "catalog item" not in src:
+                title = driver.title.lower()
+                
+                # specific text often found on BL error pages
+                if "not found" in title or "not found" in src or "invalid" in src:
                     return {"error": f"Item {item_id} not found on BrickLink."}
-                raise # Re-raise if it's a different timeout (e.g. captcha)
+                
+                # If we are here, it's a timeout/captcha/crash
+                # We raise to let the outer block catch it, but we can check for captcha too
+                if "captcha" in src or "challenge" in src:
+                    return {"error": "Scraper blocked by Captcha. Try again later."}
+                
+                raise 
 
             time.sleep(1.5) # Extra buffer
 
@@ -167,15 +176,13 @@ class BrickLinkScraper:
             return data
         except Exception as e:
             logging.error(f"Scrape failed for {item_id}: {e}")
-            try:
-                # Debug: Save Screenshot
-                timestamp = int(time.time())
-                debug_path = f"debug_fail_{item_id}_{timestamp}.png"
-                driver.save_screenshot(debug_path)
-                logging.info(f"Saved debug screenshot to {debug_path}")
-                return {"error": f"Scrape failed: {e}. (See {debug_path})"}
-            except:
-                return {"error": str(e)}
+            msg = str(e)
+            
+            # Sanitize Stacktrace from UI
+            if "Stacktrace:" in msg:
+                msg = "Browser Error: The page failed to load correctly."
+            
+            return {"error": msg}
         finally:
             driver.quit()
 
