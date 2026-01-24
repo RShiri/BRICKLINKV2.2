@@ -48,8 +48,11 @@ def render_gallery_html(images, captions):
         html += f"""<div style="display: flex; flex-direction: column; align-items: center; width: 110px;"><div style="height: 110px; display: flex; align-items: center; justify-content: center; overflow: hidden; background: #f9f9f9; border-radius: 8px; border: 1px solid #eee;"><img src="{img}" style="max-width: 100%; max-height: 100%; object-fit: contain;"></div><div style="font-size: 12px; text-align: center; margin-top: 5px; color: #555; line-height: 1.2;">{caption_html}</div></div>"""
     
     html += "</div>"
+
     st.markdown(html, unsafe_allow_html=True)
 
+def delete_from_db(item_id):
+    """Deletes an item from the database."""
     db = Database()
     try:
         db.cursor.execute("DELETE FROM items WHERE item_id = ?", (item_id,))
