@@ -686,7 +686,7 @@ elif mode == "🔎 Set Analyzer":
                             st.image(item['main_img'], width=200)
                             st.code(item['report'], language="text")
                         else:
-                            col_img, col_txt = st.columns([1,3])
+                            col_img, col_txt = st.columns([1,5])
                             with col_img: st.image(item['main_img'], width="stretch")
                             with col_txt: st.code(item['report'], language="text")
                             
@@ -780,7 +780,7 @@ elif mode == "🔎 Set Analyzer":
                         # 1. Expanders
                         for item in expanders_data:
                             with st.expander(f"📄 Report: {item['id']} - {item['name']}"):
-                                col1, col2 = st.columns([1, 3])
+                                col1, col2 = st.columns([1, 5])
                                 with col1: st.image(item['main_img'], width="stretch")
                                 with col2: st.code(item['report'], language="text")
                                 if item['images']:
@@ -813,7 +813,7 @@ elif mode == "🔎 Set Analyzer":
                             st.image(res["main_img"], width=200)
                             st.code(res["report"], language="text")
                         else:
-                            col1, col2 = st.columns([1, 3])
+                            col1, col2 = st.columns([1, 5])
                             with col1:
                                 st.image(res["main_img"], width="stretch")
                             with col2:
