@@ -478,7 +478,6 @@ def load_data():
 
 # --- SIDEBAR NAV ---
 mode = st.sidebar.radio("Navigation", ["🔎 Set Analyzer", "📊 Portfolio Manager"], index=0)
-mobile_view = st.sidebar.checkbox("📱 Mobile View", value=False)
 st.sidebar.divider()
 
 if mode == "🔎 Set Analyzer":
