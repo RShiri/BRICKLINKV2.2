@@ -783,16 +783,13 @@ elif mode == "🔎 Set Analyzer":
                     res = process_analysis(item_id, deep_scan, force_scrape=force_mode, progress_callback=status_placeholder.write)
                     status_placeholder.empty()
 
+
                     if res.get("success"):
-                        if mobile_view:
-                            st.image(res["main_img"], width=200)
+                        col1, col2 = st.columns([1, 2])
+                        with col1:
+                            st.image(res["main_img"], width=350)
+                        with col2:
                             st.code(res["report"], language="text")
-                        else:
-                            col1, col2 = st.columns([1, 2])
-                            with col1:
-                                st.image(res["main_img"], width=350)
-                            with col2:
-                                st.code(res["report"], language="text")
                         
                         if res["images"]:
                             st.markdown("### 👥 Minifigures Gallery")
