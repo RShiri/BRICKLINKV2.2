@@ -434,9 +434,31 @@ if mode == "📊 Portfolio Manager":
     col_filter, col_status = st.columns([2, 1])
     with col_filter:
         collection_source = st.radio("Collection Source:", ["Ram's Collection", "Full Database"], horizontal=True)
-        if st.button("🔄 Refresh Data"):
+        col_btn1, col_btn2 = st.columns(2)
+        if col_btn1.button("🔄 Refresh Data"):
             st.cache_data.clear()
             st.rerun()
+        
+        if col_btn2.button("📥 Import CSV"):
+            try:
+                if os.path.exists("BrickEconomy-Sets(2).csv"):
+                    df_csv = pd.read_csv("BrickEconomy-Sets(2).csv")
+                    db = Database()
+                    count = 0
+                    for _, row in df_csv.iterrows():
+                        raw_id = str(row['Number']).strip()
+                        # Clean ID
+                        clean_id = raw_id.split('-')[0] if '-' in raw_id else raw_id
+                        db.add_to_collection(clean_id, "Ram's Collection")
+                        count += 1
+                    db.close()
+                    st.success(f"Successfully imported {count} items to Ram's Collection!")
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.error("CSV file not found: BrickEconomy-Sets(2).csv")
+            except Exception as e:
+                st.error(f"Import failed: {e}")
     
     df_sets, df_figs = load_data()
     
