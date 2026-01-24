@@ -612,36 +612,47 @@ if mode == "📊 Portfolio Manager":
             st.rerun()
 
     st.sidebar.divider()
-    st.sidebar.warning("⚠️ Danger Zone")
-    if st.sidebar.button("🧨 Nuke Database (Fix Corruption)"):
-        try:
-            db_path = "bricklink_data.db"
-            if os.path.exists(db_path):
-                # Close any existing connections (best effort)
-                try: Database().close()
-                except: pass
-                
-                os.remove(db_path)
-                st.cache_data.clear()
-                st.toast("Database Deleted. It will be recreated on next action.", icon="💥")
-                time.sleep(2)
-                st.rerun()
-            else:
-                st.error("No database file found to delete.")
-        except Exception as e:
-            st.error(f"Failed to nuke database: {e}")
+    st.sidebar.subheader("💾 Data Management")
+    
+    col_backup, col_restore = st.sidebar.columns(2)
+    
+    if col_backup.button("📤 Backup"):
+        db = Database()
+        success = db.export_to_json("bricklink_data.json")
+        db.close()
+        if success:
+            st.toast("Backup Created! Safe to push.", icon="✅")
+        else:
+            st.toast("Backup Failed!", icon="❌")
 
-    if st.sidebar.button("♻️ Force Restore from Backup"):
+    if col_restore.button("♻️ Restore"):
         try:
             db = Database()
             db.seed_from_json("bricklink_data.json")
             db.close()
             st.cache_data.clear()
-            st.toast("Restored data from 'bricklink_data.json'!", icon="✅")
+            st.toast("Restored from Backup!", icon="✅")
             time.sleep(1)
             st.rerun()
         except Exception as e:
             st.error(f"Restore failed: {e}")
+            
+    with st.sidebar.expander("⚠️ Danger Zone", expanded=False):
+        if st.button("🧨 Nuke Database"):
+             try:
+                db_path = "bricklink_data.db"
+                if os.path.exists(db_path):
+                    try: Database().close()
+                    except: pass
+                    os.remove(db_path)
+                    st.cache_data.clear()
+                    st.toast("Database Nuked!", icon="💥")
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.error("No DB found.")
+             except Exception as e:
+                 st.error(f"Failed: {e}")
 
 elif mode == "🔎 Set Analyzer":
     st.title("🔎 Set Analyzer")
