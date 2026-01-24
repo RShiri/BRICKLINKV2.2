@@ -237,13 +237,12 @@ class BrickLinkScraper:
                 
                 # Currency Normalization
                 rate = 1.0
-                is_linux = os.name != 'nt'  # Simple check for Cloud/Linux env
                 
                 if '$' in p_text or 'US' in p_text: rate = 3.65
                 elif '€' in p_text or 'EUR' in p_text: rate = 4.0
                 elif '£' in p_text or 'GBP' in p_text: rate = 4.7
-                elif is_linux and not any(x in p_text for x in ['₪', 'ILS', 'NIS']):
-                     # Fallback for Cloud: If no local currency found, assume USD
+                elif not any(x in p_text for x in ['₪', 'ILS', 'NIS']):
+                     # Fallback: If no local currency found, assume USD (Common in Headless Mode)
                      rate = 3.65
                 
                 raw_val = float(re.sub(r'[^\d.]', '', p_text))
