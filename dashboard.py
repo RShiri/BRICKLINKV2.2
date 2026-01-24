@@ -631,6 +631,18 @@ if mode == "📊 Portfolio Manager":
         except Exception as e:
             st.error(f"Failed to nuke database: {e}")
 
+    if st.sidebar.button("♻️ Force Restore from Backup"):
+        try:
+            db = Database()
+            db.seed_from_json("bricklink_data.json")
+            db.close()
+            st.cache_data.clear()
+            st.toast("Restored data from 'bricklink_data.json'!", icon="✅")
+            time.sleep(1)
+            st.rerun()
+        except Exception as e:
+            st.error(f"Restore failed: {e}")
+
 elif mode == "🔎 Set Analyzer":
     st.title("🔎 Set Analyzer")
     
