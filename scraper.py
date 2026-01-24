@@ -1,4 +1,4 @@
-import time, random, re, logging
+import time, random, re, logging, os
 from datetime import datetime
 from typing import Dict, Any, List
 from selenium import webdriver
@@ -66,6 +66,14 @@ class BrickLinkScraper:
         chrome_options = Options()
         chrome_options.add_argument("--headless") 
         chrome_options.add_argument("--log-level=3")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        
+        # Cloud/Linux Binary Location Check
+        if os.path.exists("/usr/bin/chromium"):
+            chrome_options.binary_location = "/usr/bin/chromium"
+        elif os.path.exists("/usr/bin/chromium-browser"):
+            chrome_options.binary_location = "/usr/bin/chromium-browser"
         
         # Random User-Agent
         user_agent = random.choice(self.USER_AGENTS)
