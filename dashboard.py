@@ -32,7 +32,6 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- HELPER FUNCTIONS ---
-@st.cache_resource(show_spinner="Booting Scraper...")
 def get_scraper():
     return BrickLinkScraper()
 
