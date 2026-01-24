@@ -759,9 +759,13 @@ elif mode == "🎯 Sniper Chat":
                         st.toast(f"✅ {item_id} analyzed!", icon="💾")
                         
                         # Manual Add to Collection
-                        col_btn, _ = st.columns([1, 3])
-                        with col_btn:
-                            if st.button(f"➕ Add {item_id} to Collection"):
+                        col_db, col_ram = st.columns(2)
+                        
+                        with col_db:
+                            st.button("✅ Saved to Global DB", disabled=True, help="This item is already auto-saved to the main database.")
+                            
+                        with col_ram:
+                            if st.button(f"➕ Add to Ram's Collection"):
                                 db = Database()
                                 db.add_to_collection(item_id, "Ram's Collection")
                                 db.close()
