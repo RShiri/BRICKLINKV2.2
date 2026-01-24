@@ -210,9 +210,11 @@ def process_analysis(item_id, deep_scan_enabled, force_scrape=False, progress_ca
 
         if deep_scan_enabled:
             try:
-                p_new = item_data['new']['price_avg']
-                p_used = item_data['used']['price_avg']
-                if p_new == 0 and p_used == 0:
+                # Check directly if we have any data rows, since 'price_avg' isn't in raw DB data
+                has_new = item_data.get('new', {}).get('sold') or item_data.get('new', {}).get('stock')
+                has_used = item_data.get('used', {}).get('sold') or item_data.get('used', {}).get('stock')
+                
+                if not has_new and not has_used:
                     needs_scrape = True
             except:
                 needs_scrape = True
