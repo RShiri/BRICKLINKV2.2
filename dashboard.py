@@ -281,10 +281,12 @@ def process_analysis(item_id, deep_scan_enabled, force_scrape=False, progress_ca
                     except: fig_needs_scrape = True
                 
                 # Fix if needed
+                # Fix if needed
                 if fig_needs_scrape:
                     try:
-                        if progress_callback: progress_callback(f"🔄 Fixing {fig['name']}...")
-                        else: st.toast(f"Fixing {fig['name']}...", icon="🔄")
+                        msg = f"⬇️ Fetching data for {fig['name'][:15]}... ({idx+1}/{num_figs})"
+                        if progress_callback: progress_callback(msg)
+                        else: st.toast(msg, icon="⬇️")
                         
                         fresh_data = scraper.scrape(fig['id'], item_type='M')
                         if fresh_data:
