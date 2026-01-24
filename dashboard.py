@@ -17,7 +17,7 @@ st.set_page_config(page_title="BrickLink Sniper V1.3", layout="wide", page_icon=
 st.markdown("""
 <style>
     .stChatInputContainer {bottom: 20px;}
-    .stMetric {background-color: #f0f2f6; padding: 10px; border-radius: 5px;}
+    .stMetric {background-color: transparent; padding: 10px; border-radius: 5px; border: 1px solid #333;}
     .stDataFrame {border: 1px solid #e0e0e0; border-radius: 5px;}
     
     /* Mobile Optimization */

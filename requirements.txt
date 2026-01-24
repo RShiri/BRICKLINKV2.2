@@ -4,3 +4,4 @@ streamlit
 pandas
 colorama
 tqdm
+psycopg2-binary

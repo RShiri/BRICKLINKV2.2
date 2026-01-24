@@ -16,3 +16,6 @@ logs/
 *.db
 *.sqlite3
 bricklink_data.db
+
+# Secrets
+.streamlit/secrets.toml
