@@ -223,7 +223,11 @@ def process_analysis(item_id, deep_scan_enabled, force_scrape=False, progress_ca
     if needs_scrape:
         try:
             if progress_callback: progress_callback(f"⏳ Scraping {item_id}...")
-            scrape_result = scraper.scrape(item_id, force=True)
+            
+            # Determine type
+            itype = 'M' if any(c.isalpha() for c in item_id) else 'S'
+            
+            scrape_result = scraper.scrape(item_id, item_type=itype, force=True)
             if scrape_result and "error" in scrape_result:
                 return {"error": scrape_result["error"]}
             
