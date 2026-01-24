@@ -143,7 +143,7 @@ def create_console_report(item_id, result, minifig_details, mf_new, mf_used):
     lines.append(f"\n{'='*70}")
     return "\n".join(lines)
 
-def process_analysis(item_id, deep_scan_enabled, progress_callback=None):
+def process_analysis(item_id, deep_scan_enabled, force_scrape=False, progress_callback=None):
     """
     Core analysis logic shared by Batch and Single modes.
     Returns a dict with results or error.
@@ -155,7 +155,9 @@ def process_analysis(item_id, deep_scan_enabled, progress_callback=None):
     needs_scrape = False
     
     # 1. Validation Logic
-    if not item_data:
+    if force_scrape:
+        needs_scrape = True
+    elif not item_data:
         needs_scrape = True
     else:
         try:
@@ -167,6 +169,7 @@ def process_analysis(item_id, deep_scan_enabled, progress_callback=None):
 
             if datetime.now() - last_update > timedelta(days=30):
                 needs_scrape = True
+
         except: needs_scrape = True
 
         if deep_scan_enabled:
@@ -184,7 +187,7 @@ def process_analysis(item_id, deep_scan_enabled, progress_callback=None):
     if needs_scrape:
         try:
             if progress_callback: progress_callback(f"⏳ Scraping {item_id}...")
-            item_data = scraper.scrape(item_id)
+            item_data = scraper.scrape(item_id, force=True) # Always force if needs_scrape is True
             if item_data:
                 item_data = db.get_item(item_id) # Reload cleaned
         except Exception as e:
@@ -569,13 +572,24 @@ elif mode == "🎯 Sniper Chat":
             st.cache_data.clear()
             st.warning("Cache cleared.")
         else:
-            # Parse IDs
-            raw_ids = [x.strip() for x in user_input.replace(',', ' ').split() if x.strip()]
+            # Parse IDs and Flags
+            raw_input = user_input.replace(',', ' ').split()
+            ids = []
+            force_mode = False
+            
+            for token in raw_input:
+                token = token.strip()
+                if token.lower() in ['force', '--force', '-f']:
+                    force_mode = True
+                elif token:
+                    ids.append(token)
+            
+            raw_ids = ids
             
             # BATCH MODE
             if len(raw_ids) > 1:
                 with st.chat_message("assistant"):
-                    st.write(f"🚀 Batch Processing {len(raw_ids)} items...")
+                    st.write(f"🚀 Batch Processing {len(raw_ids)} items... (Force: {force_mode})")
                     prog_bar = st.progress(0)
                     status_txt = st.empty()
                     
@@ -586,7 +600,8 @@ elif mode == "🎯 Sniper Chat":
                         status_txt.write(f"Processing {item_id} ({i+1}/{len(raw_ids)})...")
                         
                         try:
-                            res = process_analysis(item_id, deep_scan, progress_callback=status_txt.write)
+                            # Pass force_scrape
+                            res = process_analysis(item_id, deep_scan, force_scrape=force_mode, progress_callback=status_txt.write)
                             
                             if res.get("success"):
                                 summaries.append(res["summary"])
@@ -635,11 +650,12 @@ elif mode == "🎯 Sniper Chat":
                         st.toast("Batch Complete!", icon="✅")
 
             # SINGLE MODE
-            else:
+            elif raw_ids:
                 item_id = raw_ids[0]
                 with st.chat_message("assistant"):
                     status_placeholder = st.empty()
-                    res = process_analysis(item_id, deep_scan, progress_callback=status_placeholder.write)
+                    # Pass force_scrape
+                    res = process_analysis(item_id, deep_scan, force_scrape=force_mode, progress_callback=status_placeholder.write)
                     status_placeholder.empty()
 
                     if res.get("success"):
