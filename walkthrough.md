@@ -57,13 +57,23 @@ python -m streamlit run dashboard.py
 A new tab will open in your browser.
 
 **Exploring the Dashboard:**
-1.  **Main Table**: You will see a list of all sets you've scraped.
-    -   Look for the **"Profit"** and **"Margin %"** columns. These highlight the potential profit if you were to buy the cheapest active listing and sell at market price.
-    -   Click on the **"Profit"** column header to sort by the best deals.
-2.  **Details View**: Click on the row for `75192`.
-    -   The sidebar will update with the set's image and key stats.
-    -   A **Minifigures Table** will appear below, showing the specific value of every minifigure in that set.
-    -   Use the sidebar radio button to switch between "Full Database" and "Ram's Collection" (if you've configured collection tracking).
+
+The dashboard now features two main modes, selectable from the **Sidebar**:
+
+1.  **🎯 Sniper Chat (Default)**
+    *   **Chat Interface**: Interact with the bot by entering Set IDs (e.g., `75192`, `75001, 75002`).
+    *   **Reports**: The bot will fetch data and display the same detailed ASCII report as the CLI, but within the chat window.
+    *   **Visuals**: It also displays set images and a gallery of all included minifigures with their individual prices.
+    *   **Action**: You can add items to your personal collection directly from the chat.
+
+2.  **📊 Portfolio Manager**
+    *   **Overview**: View the total value of your collection (New vs Used) and potential profit.
+    *   **Tabs**:
+        *   **💎 Investment Hub**: Shows "New" condition sets with the highest profit potential.
+        *   **⚔️ Part-Out Strategist**: Highlights "Used" sets where the raw minifigure value exceeds the set price (great for parting out).
+        *   **📦 All Items**: A full list of every set you've scanned or added.
+        *   **👥 Minifigures**: A dedicated view for all your minifigures.
+    *   **Collection Source**: Toggle between "Ram's Collection" (your saved items) and "Full Database" (everything ever scanned).
 
 ### 🧠 Understanding the Pricing Logic
 

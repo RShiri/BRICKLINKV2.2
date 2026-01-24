@@ -1,2 +1,6 @@
 selenium
 beautifulsoup4
+streamlit
+pandas
+colorama
+tqdm

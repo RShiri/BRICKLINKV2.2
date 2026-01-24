@@ -5,6 +5,7 @@ import logging
 from datetime import datetime, timedelta
 
 # logging setup
+os.makedirs('logs', exist_ok=True)
 logging.basicConfig(
     filename='logs/system.log',
     level=logging.INFO,
