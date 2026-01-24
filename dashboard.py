@@ -611,6 +611,26 @@ if mode == "📊 Portfolio Manager":
             st.cache_data.clear()
             st.rerun()
 
+    st.sidebar.divider()
+    st.sidebar.warning("⚠️ Danger Zone")
+    if st.sidebar.button("🧨 Nuke Database (Fix Corruption)"):
+        try:
+            db_path = "bricklink_data.db"
+            if os.path.exists(db_path):
+                # Close any existing connections (best effort)
+                try: Database().close()
+                except: pass
+                
+                os.remove(db_path)
+                st.cache_data.clear()
+                st.toast("Database Deleted. It will be recreated on next action.", icon="💥")
+                time.sleep(2)
+                st.rerun()
+            else:
+                st.error("No database file found to delete.")
+        except Exception as e:
+            st.error(f"Failed to nuke database: {e}")
+
 elif mode == "🔎 Set Analyzer":
     st.title("🔎 Set Analyzer")
     

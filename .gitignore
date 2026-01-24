@@ -9,8 +9,10 @@ venv/
 .venv
 env.bak/
 venv.bak/
-*.db
-*.db-shm
-*.db-wal
 logs/
 .vscode/
+
+# Database
+*.db
+*.sqlite3
+bricklink_data.db
