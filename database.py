@@ -63,6 +63,45 @@ class Database:
             )
         ''')
         self.conn.commit()
+        
+        # Auto-Seed from JSON if DB is empty
+        self.cursor.execute("SELECT count(*) FROM items")
+        if self.cursor.fetchone()[0] == 0:
+            self.seed_from_json("bricklink_data.json")
+
+    def seed_from_json(self, json_path):
+        """Seeds the database from a JSON dump file."""
+        if not os.path.exists(json_path): return
+        
+        try:
+            with open(json_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            # Seed Items
+            for item in data.get('items', []):
+                self.cursor.execute(
+                    "INSERT OR REPLACE INTO items (item_id, json_data, updated_at) VALUES (?, ?, ?)",
+                    (item['id'], item['data'], item['updated_at'])
+                )
+            
+            # Seed Inventory
+            for inv in data.get('inventory', []):
+                self.cursor.execute(
+                    "INSERT OR REPLACE INTO inventory_lists (set_id, json_data, updated_at) VALUES (?, ?, ?)",
+                    (inv['id'], inv['data'], inv['updated_at'])
+                )
+            
+            # Seed Collections
+            for col in data.get('collections', []):
+                self.cursor.execute(
+                    "INSERT OR IGNORE INTO collections (item_id, collection_name, added_at) VALUES (?, ?, ?)",
+                    (col['item_id'], col['collection_name'], col['added_at'])
+                )
+            
+            self.conn.commit()
+            logging.info(f"Seeded database from {json_path}")
+        except Exception as e:
+            logging.error(f"Failed to seed database: {e}")
 
     def save_item(self, item_id, data):
         """
