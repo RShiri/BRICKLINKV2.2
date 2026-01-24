@@ -268,20 +268,30 @@ def process_analysis(item_id, deep_scan_enabled, force_scrape=False, progress_ca
                 # Get fig data
                 fd = db.get_item(fig['id'])
                 
-                # Check for bad data (Deep Scan)
+                # Check for bad data or stale data
                 fig_needs_scrape = False
                 if not fd:
                     fig_needs_scrape = True
-                elif deep_scan_enabled:
-                    try:
-                        fn = fd.get('new', {}).get('price_avg', 0)
-                        fu = fd.get('used', {}).get('price_avg', 0)
-                        if fn == 0 and fu == 0:
-                            fig_needs_scrape = True
-                    except: fig_needs_scrape = True
+                else:
+                    # 1. Freshness Check (30 days)
+                    last_updated = fd.get("meta", {}).get("timestamp") or fd.get("updated_at")
+                    if last_updated:
+                        try:
+                            dt = datetime.fromisoformat(last_updated)
+                            if datetime.now() - dt > timedelta(days=30):
+                                fig_needs_scrape = True
+                        except: fig_needs_scrape = True
+
+                    # 2. Deep Scan (Missing content)
+                    if not fig_needs_scrape and deep_scan_enabled:
+                        try:
+                            has_new = fd.get('new', {}).get('sold') or fd.get('new', {}).get('stock')
+                            has_used = fd.get('used', {}).get('sold') or fd.get('used', {}).get('stock')
+                            if not has_new and not has_used:
+                                fig_needs_scrape = True
+                        except: fig_needs_scrape = True
                 
-                # Fix if needed
-                # Fix if needed
+                # Scrape if needed
                 if fig_needs_scrape:
                     try:
                         msg = f"⬇️ Fetching data for {fig['name'][:15]}... ({idx+1}/{num_figs})"
@@ -611,48 +621,7 @@ if mode == "📊 Portfolio Manager":
             st.cache_data.clear()
             st.rerun()
 
-    st.sidebar.divider()
-    st.sidebar.subheader("💾 Data Management")
-    
-    col_backup, col_restore = st.sidebar.columns(2)
-    
-    if col_backup.button("📤 Backup"):
-        db = Database()
-        success = db.export_to_json("bricklink_data.json")
-        db.close()
-        if success:
-            st.toast("Backup Created! Safe to push.", icon="✅")
-        else:
-            st.toast("Backup Failed!", icon="❌")
 
-    if col_restore.button("♻️ Restore"):
-        try:
-            db = Database()
-            db.seed_from_json("bricklink_data.json")
-            db.close()
-            st.cache_data.clear()
-            st.toast("Restored from Backup!", icon="✅")
-            time.sleep(1)
-            st.rerun()
-        except Exception as e:
-            st.error(f"Restore failed: {e}")
-            
-    with st.sidebar.expander("⚠️ Danger Zone", expanded=False):
-        if st.button("🧨 Nuke Database"):
-             try:
-                db_path = "bricklink_data.db"
-                if os.path.exists(db_path):
-                    try: Database().close()
-                    except: pass
-                    os.remove(db_path)
-                    st.cache_data.clear()
-                    st.toast("Database Nuked!", icon="💥")
-                    time.sleep(1)
-                    st.rerun()
-                else:
-                    st.error("No DB found.")
-             except Exception as e:
-                 st.error(f"Failed: {e}")
 
 elif mode == "🔎 Set Analyzer":
     st.title("🔎 Set Analyzer")
