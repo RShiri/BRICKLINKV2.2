@@ -234,7 +234,16 @@ class BrickLinkScraper:
                 # 2. Extract Price & Qty
                 q_idx, p_idx = (-2, -1) if table_type == "sold" else (1, 2)
                 p_text = tds[p_idx].get_text(strip=True).replace(',', '')
-                p = float(re.sub(r'[^\d.]', '', p_text))
+                
+                # Currency Normalization
+                rate = 1.0
+                if '$' in p_text or 'US' in p_text: rate = 3.65
+                elif '€' in p_text or 'EUR' in p_text: rate = 4.0
+                elif '£' in p_text or 'GBP' in p_text: rate = 4.7
+                
+                raw_val = float(re.sub(r'[^\d.]', '', p_text))
+                p = raw_val * rate
+
                 
                 rows.append({
                     'qty': int(re.sub(r'[^\d]', '', tds[q_idx].get_text(strip=True))),
