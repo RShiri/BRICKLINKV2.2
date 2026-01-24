@@ -146,13 +146,20 @@ class BrickLinkScraper:
             driver.get(url)
             
             # Wait for table
-            WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.CLASS_NAME, "pcipgInnerTable")))
-            
-            # Wait for AJAX data (real currency or tilde)
-            WebDriverWait(driver, 15).until(
-                lambda d: "ils" in d.page_source.lower() or "~" in d.page_source
-            )
-            
+            try:
+                WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CLASS_NAME, "pcipgInnerTable")))
+                
+                # Wait for AJAX data (real currency or tilde)
+                WebDriverWait(driver, 10).until(
+                    lambda d: "ils" in d.page_source.lower() or "~" in d.page_source
+                )
+            except:
+                # Check for "Not Found" indicators
+                src = driver.page_source.lower()
+                if "item not found" in src or "catalog item" not in src:
+                    return {"error": f"Item {item_id} not found on BrickLink."}
+                raise # Re-raise if it's a different timeout (e.g. captcha)
+
             time.sleep(1.5) # Extra buffer
 
             data = self._parse_html(item_id, driver.page_source)
