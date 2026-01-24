@@ -160,7 +160,15 @@ class BrickLinkScraper:
             return data
         except Exception as e:
             logging.error(f"Scrape failed for {item_id}: {e}")
-            return {"error": str(e)}
+            try:
+                # Debug: Save Screenshot
+                timestamp = int(time.time())
+                debug_path = f"debug_fail_{item_id}_{timestamp}.png"
+                driver.save_screenshot(debug_path)
+                logging.info(f"Saved debug screenshot to {debug_path}")
+                return {"error": f"Scrape failed: {e}. (See {debug_path})"}
+            except:
+                return {"error": str(e)}
         finally:
             driver.quit()
 

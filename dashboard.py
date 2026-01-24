@@ -224,8 +224,11 @@ def process_analysis(item_id, deep_scan_enabled, force_scrape=False, progress_ca
     if needs_scrape:
         try:
             if progress_callback: progress_callback(f"⏳ Scraping {item_id}...")
-            item_data = scraper.scrape(item_id, force=True) # Always force if needs_scrape is True
-            if item_data:
+            scrape_result = scraper.scrape(item_id, force=True)
+            if scrape_result and "error" in scrape_result:
+                return {"error": scrape_result["error"]}
+            
+            if scrape_result:
                 item_data = db.get_item(item_id) # Reload cleaned
         except Exception as e:
             return {"error": f"Scrape failed: {e}"}
