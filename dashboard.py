@@ -419,6 +419,12 @@ st.sidebar.divider()
 
 if mode == "🎯 Sniper Chat":
     deep_scan = st.sidebar.checkbox("Enable Deep Scan (Fix Zero Prices)", value=True, help="Force re-scrape for items with 0.00 price.")
+    
+    if st.sidebar.button("🔄 Reset Scraper Engine"):
+        get_scraper.clear()
+        st.toast("Scraper rebooted!", icon="♻️")
+        time.sleep(1)
+        st.rerun()
 else:
     deep_scan = False
 
