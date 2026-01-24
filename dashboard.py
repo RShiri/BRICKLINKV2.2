@@ -458,6 +458,7 @@ def load_data():
 
 # --- SIDEBAR NAV ---
 mode = st.sidebar.radio("Navigation", ["🎯 Sniper Chat", "📊 Portfolio Manager"], index=0)
+mobile_view = st.sidebar.checkbox("📱 Mobile View", value=False)
 st.sidebar.divider()
 
 if mode == "🎯 Sniper Chat":
@@ -477,7 +478,7 @@ if mode == "📊 Portfolio Manager":
     col_filter, col_status = st.columns([2, 1])
     with col_filter:
         collection_source = st.radio("Collection Source:", ["Ram's Collection", "Full Database"], horizontal=True)
-        mobile_view = st.checkbox("📱 Mobile View", value=False)
+        # Mobile view is now global
         
         col_btn1, col_btn2 = st.columns(2)
         if col_btn1.button("🔄 Refresh Data"):
@@ -615,9 +616,14 @@ elif mode == "🎯 Sniper Chat":
             if "expanders" in msg:
                 for item in msg["expanders"]:
                     with st.expander(f"📄 Report: {item['id']} - {item['name']}"):
-                        col_img, col_txt = st.columns([1,3])
-                        with col_img: st.image(item['main_img'], width="stretch")
-                        with col_txt: st.code(item['report'], language="text")
+                        if mobile_view:
+                            st.image(item['main_img'], width=200)
+                            st.code(item['report'], language="text")
+                        else:
+                            col_img, col_txt = st.columns([1,3])
+                            with col_img: st.image(item['main_img'], width="stretch")
+                            with col_txt: st.code(item['report'], language="text")
+                            
                         if item['images']:
                             st.write("### Minifigures")
                             render_gallery_html(item['images'], item['captions'])
@@ -737,11 +743,15 @@ elif mode == "🎯 Sniper Chat":
                     status_placeholder.empty()
 
                     if res.get("success"):
-                        col1, col2 = st.columns([1, 3])
-                        with col1:
-                            st.image(res["main_img"], width="stretch")
-                        with col2:
+                        if mobile_view:
+                            st.image(res["main_img"], width=200)
                             st.code(res["report"], language="text")
+                        else:
+                            col1, col2 = st.columns([1, 3])
+                            with col1:
+                                st.image(res["main_img"], width="stretch")
+                            with col2:
+                                st.code(res["report"], language="text")
                         
                         if res["images"]:
                             st.markdown("### 👥 Minifigures Gallery")
