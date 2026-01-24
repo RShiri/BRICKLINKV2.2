@@ -757,7 +757,14 @@ elif mode == "🔎 Set Analyzer":
                                     render_gallery_html(item['images'], item['captions'])
 
                         # 2. Summary Table (At the end)
-                        st.dataframe(df_summary, width="stretch", hide_index=True)
+                        # Add totals row
+                        numeric_cols = df_summary.select_dtypes(include=['number']).columns
+                        totals = {col: df_summary[col].sum() for col in numeric_cols}
+                        totals['Name'] = '📊 TOTAL'
+                        totals_df = pd.DataFrame([totals])
+                        df_with_totals = pd.concat([df_summary, totals_df], ignore_index=True)
+                        
+                        st.dataframe(df_with_totals, width="stretch", hide_index=True)
 
                         # Save to History
                         st.session_state.messages.append({
