@@ -561,23 +561,19 @@ if mode == "📊 Portfolio Manager":
         if not df_sets.empty:
             df_new = df_sets[df_sets["New Price"] > 0].sort_values("Profit", ascending=False)
             
-            if mobile_view:
-                for _, row in df_new.iterrows():
-                    render_mobile_card(row)
-            else:
-                st.dataframe(
-                    df_new,
-                    width="stretch",
-                    column_order=["Stale", "Image", "ID", "Name", "New Price", "New Conf", "Used Price", "Profit", "Margin %", "Rating"],
-                    hide_index=True,
-                    column_config={
-                        "Image": st.column_config.ImageColumn("Img", width="small"),
-                        "New Price": st.column_config.NumberColumn("New Price", format="%.2f ₪"),
-                        "Used Price": st.column_config.NumberColumn("Used Price", format="%.2f ₪"),
-                        "Profit": st.column_config.NumberColumn("Profit", format="%.2f ₪"),
-                        "Margin %": st.column_config.ProgressColumn("Margin", format="%.0f%%", min_value=-50, max_value=100)
-                    }
-                )
+            st.dataframe(
+                df_new,
+                width="stretch",
+                column_order=["Stale", "Image", "ID", "Name", "New Price", "New Conf", "Used Price", "Profit", "Margin %", "Rating"],
+                hide_index=True,
+                column_config={
+                    "Image": st.column_config.ImageColumn("Img", width="small"),
+                    "New Price": st.column_config.NumberColumn("New Price", format="%.2f ₪"),
+                    "Used Price": st.column_config.NumberColumn("Used Price", format="%.2f ₪"),
+                    "Profit": st.column_config.NumberColumn("Profit", format="%.2f ₪"),
+                    "Margin %": st.column_config.ProgressColumn("Margin", format="%.0f%%", min_value=-50, max_value=100)
+                }
+            )
 
     with tab2:
         st.caption("Undervalued Used Sets (High Minifig Value)")
