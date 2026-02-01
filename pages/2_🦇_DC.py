@@ -64,17 +64,19 @@ def load_dc_data():
             
             # Big Figures: Detect by explicit keywords OR specific IDs known to be big figs
             # Note: All big figures have at least 7 parts and most have Giant Arms/Hands (part 43093)
+            item_id = meta.get("item_id", "")
+            
+            # DC big figure IDs (with and without leading zeros)
+            dc_big_fig_ids = [
+                "sh017", "sh17", "sh106", "sh230", "sh238", "sh414", "sh504",  # Bane
+                "sh041", "sh41", "sh205", "sh334", "sh513"  # Killer Croc
+            ]
+            
             is_big_fig = (
                 "big fig" in name_lower or 
                 "bigfig" in name_lower or
                 "giant" in name_lower or
-                # Verified DC big figures from BrickLink
-                # Bane: sh017, sh106, sh238, sh414, sh230, sh504
-                # Killer Croc: sh041, sh205, sh334, sh513
-                (meta.get("item_id") in [
-                    "sh017", "sh106", "sh238", "sh414", "sh230", "sh504",  # Bane
-                    "sh041", "sh205", "sh334", "sh513"  # Killer Croc
-                ])
+                item_id in dc_big_fig_ids
             )
             
             display_data.append({

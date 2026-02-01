@@ -64,18 +64,19 @@ def load_marvel_data():
             # Exclude "giant-man" as that's a character name, not a big figure indicator
             # Note: All big figures have at least 7 parts and most have Giant Arms/Hands (part 43093)
             has_giant_keyword = "giant" in name_lower and "giant-man" not in name_lower
+            item_id = meta.get("item_id", "")
+            
+            # Marvel big figure IDs (Thanos and others, with and without leading zeros)
+            marvel_big_fig_ids = [
+                "sh280", "sh0280", "sh321", "sh0321", "sh353", "sh496", "sh507", "sh0507",
+                "sh568", "sh576", "sh0576", "sh614", "sh651", "sh733", "sh0733", "sh896", "sh0896"
+            ]
             
             is_big_fig = (
                 "big fig" in name_lower or 
                 "bigfig" in name_lower or
                 has_giant_keyword or
-                # Verified Marvel big figures from BrickLink
-                # Thanos: sh353, sh496, sh568, sh614, sh651, sh280, sh321, sh507, sh576, sh733, sh896
-                # Hulk: Various giant Hulk figures
-                (meta.get("item_id") in [
-                    "sh353", "sh496", "sh568", "sh614", "sh651",  # Thanos
-                    "sh280", "sh321", "sh507", "sh576", "sh733", "sh896"  # More Thanos and other Marvel big figs
-                ])
+                item_id in marvel_big_fig_ids
             )
             
             display_data.append({
