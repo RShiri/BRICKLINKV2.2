@@ -540,7 +540,7 @@ def load_data():
 
 # --- SIDEBAR NAV ---
 # Build navigation options based on role
-nav_options = ["🔎 Set Analyzer", "📊 Set Analyzer Database", "🦸 Superhero Database"]
+nav_options = ["🔎 Set Analyzer", "📊 Set Analyzer Database"]
 
 # Add admin-only options
 if st.session_state.user_role == "admin":
@@ -941,106 +941,6 @@ elif mode == "🔐 Udi's Collection":
             st.cache_data.clear()
             st.rerun()
 
-
-elif mode == "🦸 Superhero Database":
-    st.title("🦸 Superhero Minifigure Database")
-    st.markdown("**Marvel & DC Universe Collection (2005+)**")
-    
-    # Load superhero minifigures
-    @st.cache_data(ttl=60)
-    def load_superhero_data():
-        """Loads all superhero minifigures (sh prefix) from database."""
-        db = Database()  # Create database instance
-        raw_items = db.get_items_by_prefix("sh")
-        
-        display_data = []
-        for data in raw_items:
-            if "error" in data:
-                continue
-            
-            try:
-                analyzer = PriceAnalyzer(data)
-                analysis = analyzer.analyze()
-                
-                meta = data.get("meta", {})
-                year = meta.get("year_released")
-                year_int = int(year) if year and str(year).replace('.', '').isdigit() else 0
-                
-                # Filter: Only 2005+
-                if year_int < 2005:
-                    continue
-                
-                name = meta.get("item_name", "Unknown")
-                
-                # Categorization
-                is_exclusive = "exclusive" in name.lower() or "sdcc" in name.lower() or "nycc" in name.lower()
-                is_big_fig = "giant" in name.lower() or "big fig" in name.lower() or "bigfig" in name.lower()
-                
-                category = "Big Figures" if is_big_fig else ("Exclusives" if is_exclusive else "Standard")
-                
-                display_data.append({
-                    "Category": category,
-                    "Image": f"https://img.bricklink.com/ItemImage/MN/0/{meta.get('item_id')}.png",
-                    "ID": meta.get("item_id"),
-                    "Name": name,
-                    "Year": str(year_int) if year_int > 0 else "Unknown",
-                    "New Price": analysis.get("new", {}).get("market_price", 0),
-                    "Used Price": analysis.get("used", {}).get("market_price", 0),
-                    "New Conf": analysis.get("new", {}).get("confidence", "N/A"),
-                    "Used Conf": analysis.get("used", {}).get("confidence", "N/A")
-                })
-            except:
-                continue
-        
-        db.close()  # Close database connection
-        return pd.DataFrame(display_data)
-    
-    df = load_superhero_data()
-    
-    if not df.empty:
-        # Metrics
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Total Figures", len(df))
-        col2.metric("Standard", len(df[df["Category"] == "Standard"]))
-        col3.metric("Exclusives", len(df[df["Category"] == "Exclusives"]))
-        
-        st.divider()
-        
-        # Filters
-        col1, col2 = st.columns(2)
-        with col1:
-            category_filter = st.multiselect("Filter by Category", ["Standard", "Exclusives", "Big Figures"], default=["Standard", "Exclusives", "Big Figures"])
-        with col2:
-            year_filter = st.multiselect("Filter by Year", sorted(df["Year"].unique(), reverse=True))
-        
-        # Apply filters
-        df_filtered = df.copy()
-        if category_filter:
-            df_filtered = df_filtered[df_filtered["Category"].isin(category_filter)]
-        if year_filter:
-            df_filtered = df_filtered[df_filtered["Year"].isin(year_filter)]
-        
-        st.dataframe(
-            df_filtered,
-            width="stretch",
-            height=700,
-            hide_index=True,
-            column_config={
-                "Image": st.column_config.ImageColumn("Img", width="small"),
-                "ID": st.column_config.TextColumn("ID", width="small"),
-                "Name": st.column_config.TextColumn("Name", width="medium"),
-                "Year": st.column_config.TextColumn("Year", width="small"),
-                "New Price": st.column_config.NumberColumn("New Price", format="%.2f ₪"),
-                "Used Price": st.column_config.NumberColumn("Used Price", format="%.2f ₪"),
-                "New Conf": st.column_config.TextColumn("New Conf", width="small"),
-                "Used Conf": st.column_config.TextColumn("Used Conf", width="small"),
-                "Category": st.column_config.TextColumn("Category", width="small")
-            }
-        )
-        
-        st.caption(f"Showing {len(df_filtered)} of {len(df)} figures")
-    else:
-        st.info("No superhero minifigures found. Run scan_superheroes.py to populate the database.")
 
 
 
