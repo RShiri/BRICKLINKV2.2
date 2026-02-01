@@ -32,7 +32,7 @@ DC_KEYWORDS = [
 ]
 
 # Load all superhero minifigures
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=10)  # Reduced TTL for debugging
 def load_dc_data():
     """Loads all DC superhero minifigures from database."""
     raw_items = db.get_items_by_prefix("sh")
@@ -66,10 +66,14 @@ def load_dc_data():
             # Note: All big figures have at least 7 parts and most have Giant Arms/Hands (part 43093)
             item_id = meta.get("item_id", "")
             
-            # DC big figure IDs (with and without leading zeros)
+            # DC big figure IDs (verified from database - all use sh0XXX format)
+            # Bane: sh0414, sh0230 (wait, sh0230 is Thanos!), sh017, sh106, sh238, sh504 (also Thanos!)
+            # Killer Croc: sh0280, sh0321, sh041, sh205, sh334, sh513
             dc_big_fig_ids = [
-                "sh017", "sh17", "sh106", "sh230", "sh238", "sh414", "sh504",  # Bane
-                "sh041", "sh41", "sh205", "sh334", "sh513"  # Killer Croc
+                "sh0414",  # Bane
+                "sh0280", "sh0321",  # Killer Croc
+                "sh017", "sh17", "sh106", "sh238",  # Other Bane variants
+                "sh041", "sh41", "sh205", "sh334", "sh513"  # Other Killer Croc variants
             ]
             
             is_big_fig = (
@@ -122,6 +126,21 @@ col1.metric("Total Figures", f"{len(df_2005_plus):,}")
 col2.metric("Standard", f"{len(df_standard):,}")
 col3.metric("Exclusives", f"{len(df_exclusives):,}")
 col4.metric("Big Figures", f"{len(df_big_figs):,}")
+
+# Debug section
+with st.expander("🔍 Debug: Big Figures Detection"):
+    st.caption("Big figure IDs found in database:")
+    if not df_big_figs.empty:
+        big_fig_ids = df_big_figs["id"].tolist()
+        st.code(", ".join(big_fig_ids))
+        st.caption(f"Total: {len(big_fig_ids)} big figures")
+    else:
+        st.warning("No big figures detected!")
+        st.caption("Expected IDs: sh017, sh17, sh106, sh230, sh238, sh414, sh504, sh041, sh41, sh205, sh334, sh513")
+    
+    if st.button("🔄 Clear Cache"):
+        st.cache_data.clear()
+        st.rerun()
 
 st.divider()
 

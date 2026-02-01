@@ -30,7 +30,7 @@ MARVEL_KEYWORDS = [
 ]
 
 # Load all superhero minifigures
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=10)  # Reduced TTL for debugging
 def load_marvel_data():
     """Loads all Marvel superhero minifigures from database."""
     raw_items = db.get_items_by_prefix("sh")
@@ -66,10 +66,11 @@ def load_marvel_data():
             has_giant_keyword = "giant" in name_lower and "giant-man" not in name_lower
             item_id = meta.get("item_id", "")
             
-            # Marvel big figure IDs (Thanos and others, with and without leading zeros)
+            # Marvel big figure IDs (verified from database - all use sh0XXX format)
+            # Thanos: sh0230, sh0504, sh0507 (Cull Obsidian), sh0576, sh0733, sh0896
             marvel_big_fig_ids = [
-                "sh280", "sh0280", "sh321", "sh0321", "sh353", "sh496", "sh507", "sh0507",
-                "sh568", "sh576", "sh0576", "sh614", "sh651", "sh733", "sh0733", "sh896", "sh0896"
+                "sh0230", "sh0504", "sh0507", "sh0576", "sh0733", "sh0896",  # Thanos and Cull Obsidian
+                "sh353", "sh496", "sh568", "sh614", "sh651"  # Other Thanos variants (if they exist)
             ]
             
             is_big_fig = (
@@ -122,6 +123,21 @@ col1.metric("Total Figures", f"{len(df_2005_plus):,}")
 col2.metric("Standard", f"{len(df_standard):,}")
 col3.metric("Exclusives", f"{len(df_exclusives):,}")
 col4.metric("Big Figures", f"{len(df_big_figs):,}")
+
+# Debug section
+with st.expander("🔍 Debug: Big Figures Detection"):
+    st.caption("Big figure IDs found in database:")
+    if not df_big_figs.empty:
+        big_fig_ids = df_big_figs["id"].tolist()
+        st.code(", ".join(big_fig_ids))
+        st.caption(f"Total: {len(big_fig_ids)} big figures")
+    else:
+        st.warning("No big figures detected!")
+        st.caption("Expected IDs: sh280, sh0280, sh321, sh0321, sh353, sh496, sh507, sh0507, sh568, sh576, sh0576, sh614, sh651, sh733, sh0733, sh896, sh0896")
+    
+    if st.button("🔄 Clear Cache"):
+        st.cache_data.clear()
+        st.rerun()
 
 st.divider()
 
