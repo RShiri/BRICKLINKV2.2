@@ -61,14 +61,13 @@ def load_dc_data():
             
             # Categorization logic - improved Big Figures detection
             is_exclusive = "exclusive" in name_lower or "sdcc" in name_lower or "nycc" in name_lower
+            
+            # Big Figures: Only actual big figure variants
+            # Check for explicit "big fig" or "giant" keywords only
             is_big_fig = (
-                "giant" in name_lower or 
                 "big fig" in name_lower or 
                 "bigfig" in name_lower or
-                "bane" in name_lower or  # Bane is a big figure
-                "killer croc" in name_lower or  # Killer Croc is a big figure
-                "doomsday" in name_lower or  # Doomsday is often a big figure
-                "darkseid" in name_lower  # Darkseid is a big figure
+                "giant" in name_lower
             )
             
             display_data.append({
