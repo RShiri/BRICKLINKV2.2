@@ -950,6 +950,7 @@ elif mode == "🦸 Superhero Database":
     @st.cache_data(ttl=60)
     def load_superhero_data():
         """Loads all superhero minifigures (sh prefix) from database."""
+        db = Database()  # Create database instance
         raw_items = db.get_items_by_prefix("sh")
         
         display_data = []
@@ -991,6 +992,7 @@ elif mode == "🦸 Superhero Database":
             except:
                 continue
         
+        db.close()  # Close database connection
         return pd.DataFrame(display_data)
     
     df = load_superhero_data()
