@@ -65,9 +65,9 @@ def load_marvel_data():
                 "big fig" in name_lower or 
                 "bigfig" in name_lower or
                 "giant" in name_lower or
-                # Specific big figure characters (check ID patterns)
-                # Thanos big figures have specific IDs: sh353, sh496, sh568, sh614
-                (meta.get("item_id") in ["sh353", "sh496", "sh568", "sh614"])  # Thanos big figs
+                # Specific big figure characters (verified from BrickLink)
+                # Thanos big figures: sh353, sh496, sh568, sh614, sh651
+                (meta.get("item_id") in ["sh353", "sh496", "sh568", "sh614", "sh651"])
             )
             
             display_data.append({

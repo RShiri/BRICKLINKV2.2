@@ -67,10 +67,10 @@ def load_dc_data():
                 "big fig" in name_lower or 
                 "bigfig" in name_lower or
                 "giant" in name_lower or
-                # Specific big figure characters (check ID patterns)
-                # Bane big figures: sh017, sh106, sh238
+                # Specific big figure characters (verified from BrickLink)
+                # Bane big figures: sh017, sh106, sh238, sh414
                 # Killer Croc big figures: sh041, sh205, sh334, sh513
-                (meta.get("item_id") in ["sh017", "sh106", "sh238", "sh041", "sh205", "sh334", "sh513"])
+                (meta.get("item_id") in ["sh017", "sh106", "sh238", "sh414", "sh041", "sh205", "sh334", "sh513"])
             )
             
             display_data.append({
