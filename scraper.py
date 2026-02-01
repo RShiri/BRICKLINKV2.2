@@ -1,4 +1,4 @@
-import time, random, re, logging, os
+import time, random, re
 from datetime import datetime
 from typing import Dict, Any, List
 from selenium import webdriver
@@ -10,99 +10,41 @@ from bs4 import BeautifulSoup, Tag
 from database import Database
 
 class BrickLinkScraper:
-    """
-    Scrapes set and minifigure market data from BrickLink using Selenium and BeautifulSoup.
-    Implements anti-bot measures and smart caching.
-    """
     BASE_URL = "https://www.bricklink.com/v2/catalog/catalogitem.page"
     INV_URL = "https://www.bricklink.com/catalogItemInv.asp"
 
-    USER_AGENTS = [
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/119.0",
-        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36",
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0"
-    ]
-
     def __init__(self):
-        """Initializes the scraper and database connection."""
         self.db = Database()
         self.current_type = 'S'
-
-    def _is_cache_valid(self, item_id: str) -> bool:
-        """
-        Checks if valid cache exists for item (less than 14 days old).
-        
-        Args:
-            item_id (str): The item ID to check.
-            
-        Returns:
-            bool: True if cache is valid, False otherwise.
-        """
-        item = self.db.get_item(item_id)
-        if not item: return False
-        
-        # Check timestamp
-        last_updated = item.get("meta", {}).get("timestamp") or item.get("meta", {}).get("cache_date")
-        if not last_updated: return False
-        
-        try:
-            # Check if scrape is fresh (less than 30 days)
-            last_date = datetime.fromisoformat(last_updated.split('T')[0])
-            days_diff = (datetime.now() - last_date).days
-            return days_diff < 30
-        except Exception as e:
-            logging.warning(f"Error checking cache validity for {item_id}: {e}")
-            return True # Fallback
+        self.driver = None # Persistent driver
 
     def _init_driver(self):
-        """
-        Initializes a headless Chrome driver with anti-detection headers.
-        
-        Returns:
-            webdriver.Chrome: Configured Selenium driver.
-        """
+        """Initializes the driver only if it doesn't exist."""
+        if self.driver:
+            return self.driver
+            
         chrome_options = Options()
-        chrome_options.add_argument("--headless") 
+        chrome_options.add_argument("--headless")  # Run browser invisibly in background
         chrome_options.add_argument("--log-level=3")
-        chrome_options.add_argument("--no-sandbox")
-        chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36")
         
-        # Cloud/Linux Binary Location Check
-        if os.path.exists("/usr/bin/chromium"):
-            chrome_options.binary_location = "/usr/bin/chromium"
-        elif os.path.exists("/usr/bin/chromium-browser"):
-            chrome_options.binary_location = "/usr/bin/chromium-browser"
-        
-        # Random User-Agent
-        user_agent = random.choice(self.USER_AGENTS)
-        chrome_options.add_argument(f"user-agent={user_agent}")
-        
-        driver = webdriver.Chrome(options=chrome_options)
-        driver.set_page_load_timeout(30)
-        return driver
+        self.driver = webdriver.Chrome(options=chrome_options)
+        self.driver.set_page_load_timeout(30)
+        return self.driver
+
+    def close(self):
+        """Closes the persistent driver."""
+        if self.driver:
+            self.driver.quit()
+            self.driver = None
 
     def get_minifigs_in_set(self, set_id: str, force: bool = False) -> List[Dict]:
-        """
-        Fetches the list of minifigures contained in a set.
-        
-        Args:
-            set_id (str): The Set ID.
-            force (bool): Whether to force a fresh scrape.
-            
-        Returns:
-            List[Dict]: List of minifigure dictionaries {id, name, qty}.
-        """
         cached_data, timestamp = self.db.get_inventory(set_id)
         if not force and cached_data: return cached_data
         
         driver = self._init_driver()
         minifigs_dict = {}
         try:
-            # Anti-Bot Delay (Optimized for Speed)
-            time.sleep(random.uniform(0.5, 1.5))
-            
             url = f"{self.INV_URL}?S={set_id if '-' in set_id else f'{set_id}-1'}&viewItemType=M"
             driver.get(url)
             WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.TAG_NAME, "table")))
@@ -117,80 +59,42 @@ class BrickLinkScraper:
             self.db.save_inventory(set_id, res)
             return res
         except Exception as e:
-            logging.error(f"Failed to get minifigs for {set_id}: {e}")
+            # Don't quit driver here, just raise or return empty
+            print(f"Inventory Error: {e}")
             return []
-        finally: driver.quit()
 
     def scrape(self, item_id: str, item_type: str = 'S', force: bool = False) -> Dict[str, Any]:
-        """
-        Main method to scrape price data for an item.
-        
-        Args:
-            item_id (str): The Item ID.
-            item_type (str): 'S' for Set, 'M' for Minifig.
-            force (bool): Force refresh ignore cache.
-            
-        Returns:
-            Dict: standard price data structure.
-        """
         self.current_type = item_type
-        if not force and self._is_cache_valid(item_id):
-            return self.db.get_item(item_id)
+        if not force:
+            cached = self.db.get_item(item_id)
+            if cached: return cached
 
         driver = self._init_driver()
         try:
-            # Anti-Bot Delay (Optimized for Speed)
-            time.sleep(random.uniform(0.5, 1.5))
-            
             url = f"{self.BASE_URL}?{item_type}={item_id}#T=P"
             driver.get(url)
             
-            # Wait for table
-            try:
-                WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CLASS_NAME, "pcipgInnerTable")))
-                
-                # Wait for AJAX data
-                WebDriverWait(driver, 10).until(
-                    lambda d: "ils" in d.page_source.lower() or "~" in d.page_source
-                )
-            except:
-                # Check for "Not Found" indicators
-                src = driver.page_source.lower()
-                title = driver.title.lower()
-                
-                # specific text often found on BL error pages
-                if "not found" in title or "not found" in src or "invalid" in src:
-                    return {"error": f"Item {item_id} not found on BrickLink."}
-                
-                # If we are here, it's a timeout/captcha/crash
-                # We raise to let the outer block catch it, but we can check for captcha too
-                if "captcha" in src or "challenge" in src:
-                    return {"error": "Scraper blocked by Captcha. Try again later."}
-                
-                raise 
-
-            time.sleep(1.5) # Extra buffer
+            # המתנה לטעינת הטבלה
+            WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.CLASS_NAME, "pcipgInnerTable")))
+            
+            # המתנה לטעינת נתונים אמיתיים (AJAX) במקום Placeholders
+            WebDriverWait(driver, 15).until(
+                lambda d: "ils" in d.page_source.lower() or "~" in d.page_source
+            )
+            
+            time.sleep(1.5) # ביטחון נוסף לטעינה מלאה של כל השורות
 
             data = self._parse_html(item_id, driver.page_source)
             self.db.save_item(item_id, data)
             return data
         except Exception as e:
-            logging.error(f"Scrape failed for {item_id}: {e}")
-            msg = str(e)
-            
-            # Sanitize Stacktrace from UI
-            if "Stacktrace:" in msg:
-                msg = "Browser Error: The page failed to load correctly."
-            
-            return {"error": msg}
-        finally:
-            driver.quit()
+            # Return error dict instead of crashing, keep driver open
+            return {"error": str(e)}
 
     def _parse_html(self, item_id: str, html: str) -> Dict[str, Any]:
-        """Parses the raw HTML to extract price tables and metadata."""
         soup = BeautifulSoup(html, 'html.parser')
         
-        # Extract Name
+        # חילוץ שם הסט והשנה (למניעת KeyError ב-Runner)
         item_name = "Unknown"
         title_tag = soup.find('h1', id='item-name-title') or soup.find('title')
         if title_tag:
@@ -221,7 +125,6 @@ class BrickLinkScraper:
         return data
 
     def _extract_specs(self, soup: BeautifulSoup) -> Dict[str, Any]:
-        """Extracts weight, part count, and minifig count from the page."""
         text = soup.get_text()
         specs = {"weight_g": 0, "parts": 0, "minifigs": 0}
         
@@ -240,37 +143,24 @@ class BrickLinkScraper:
         return specs
 
     def _extract_rows(self, table: Tag, table_type: str) -> List[Dict]:
-        """Extracts price and quantity rows from a specific table."""
         rows = []
         for tr in table.find_all('tr'):
             tds = tr.find_all('td')
             if len(tds) < 2: continue
             
             is_inc = False
-            # 1. CSS Class Check
+            # 1. זיהוי לפי CSS Class (השיטה הכי אמינה ל-AJAX)
             if tr.find(class_="js-item-status-incomplete") or "(i)" in tr.get_text().lower():
                 is_inc = True
-                # logging.debug(f"Found Incomplete Item: {tr.get_text(strip=True)[:30]}...")
 
             try:
-                # 2. Extract Price & Qty
+                # 2. חילוץ מחיר וכמות לפי סוג טבלה
                 q_idx, p_idx = (-2, -1) if table_type == "sold" else (1, 2)
                 p_text = tds[p_idx].get_text(strip=True).replace(',', '')
+                p = float(re.sub(r'[^\d.]', '', p_text))
                 
-                # Currency Normalization
-                rate = 1.0
-                
-                if '$' in p_text or 'US' in p_text: rate = 3.65
-                elif '€' in p_text or 'EUR' in p_text: rate = 4.0
-                elif '£' in p_text or 'GBP' in p_text: rate = 4.7
-                elif not any(x in p_text for x in ['₪', 'ILS', 'NIS']):
-                     # Fallback: If no local currency found, assume USD (Common in Headless Mode)
-                     rate = 3.65
-                
-                raw_val = float(re.sub(r'[^\d.]', '', p_text))
-                p = raw_val * rate
 
-                
+
                 rows.append({
                     'qty': int(re.sub(r'[^\d]', '', tds[q_idx].get_text(strip=True))),
                     'price': p,

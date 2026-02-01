@@ -200,6 +200,26 @@ class Database:
         except:
             return True
 
+    def get_items_by_prefix(self, prefix):
+        """Retrieves all items where item_id starts with prefix (e.g. 'sh')."""
+        try:
+            query = "SELECT json_data, updated_at FROM items WHERE item_id LIKE %s"
+            # Postgres LIKE 'sh%'
+            self.cursor.execute(query, (prefix + '%',))
+            rows = self.cursor.fetchall()
+            
+            results = []
+            for row in rows:
+                if row[0]:
+                    data = json.loads(row[0])
+                    if "meta" in data:
+                        data["meta"]["cache_date"] = str(row[1])
+                    results.append(data)
+            return results
+        except Exception as e:
+            logging.error(f"Get Items By Prefix Failed: {e}")
+            return []
+
     def close(self):
         """Closes the connection."""
         if self.conn:

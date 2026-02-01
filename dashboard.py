@@ -31,6 +31,68 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# --- ROLE SELECTION & AUTHENTICATION ---
+# Initialize session state
+if "user_role" not in st.session_state:
+    st.session_state.user_role = None
+if "admin_authenticated" not in st.session_state:
+    st.session_state.admin_authenticated = False
+
+# Role selection page
+if st.session_state.user_role is None:
+    st.title("🧱 BrickLink Sniper V1.3")
+    st.markdown("### Welcome! Please select your access level:")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("#### 👤 User Mode")
+        st.caption("Public access to analysis tools and database")
+        if st.button("🚀 Enter as User", use_container_width=True):
+            st.session_state.user_role = "user"
+            st.rerun()
+    
+    with col2:
+        st.markdown("#### 🔐 Admin Mode")
+        st.caption("Full access including personal collections")
+        if st.button("🔑 Enter as Admin", use_container_width=True):
+            st.session_state.user_role = "admin"
+            st.rerun()
+    
+    st.stop()
+
+# Admin authentication
+if st.session_state.user_role == "admin" and not st.session_state.admin_authenticated:
+    st.title("🔐 Admin Authentication")
+    
+    password = st.text_input("Enter Admin Password", type="password", key="admin_password")
+    
+    col1, col2 = st.columns([1, 3])
+    with col1:
+        if st.button("🔓 Unlock"):
+            if password == "7399":
+                st.session_state.admin_authenticated = True
+                st.success("✅ Access granted!")
+                time.sleep(0.5)
+                st.rerun()
+            else:
+                st.error("❌ Incorrect password")
+    
+    with col2:
+        if st.button("← Back to Role Selection"):
+            st.session_state.user_role = None
+            st.rerun()
+    
+    st.stop()
+
+# Display current mode in sidebar
+st.sidebar.markdown(f"**Mode:** {'🔐 Admin' if st.session_state.user_role == 'admin' else '👤 User'}")
+if st.sidebar.button("🔄 Switch Mode"):
+    st.session_state.user_role = None
+    st.session_state.admin_authenticated = False
+    st.rerun()
+st.sidebar.divider()
+
 # --- HELPER FUNCTIONS ---
 def get_scraper():
     return BrickLinkScraper()
@@ -347,7 +409,7 @@ def process_analysis(item_id, deep_scan_enabled, force_scrape=False, progress_ca
     }
 
     # Save to Collection
-    # REMOVED: db.add_to_collection(item_id, "Ram's Collection") 
+    db.add_to_collection(item_id, "Ram's Collection")
     db.close()
     
     return {
@@ -477,7 +539,14 @@ def load_data():
     return pd.DataFrame(sets), pd.DataFrame(figs)
 
 # --- SIDEBAR NAV ---
-mode = st.sidebar.radio("Navigation", ["🔎 Set Analyzer", "📊 Portfolio Manager"], index=0)
+# Build navigation options based on role
+nav_options = ["🔎 Set Analyzer", "📊 Set Analyzer Database"]
+
+# Add admin-only options
+if st.session_state.user_role == "admin":
+    nav_options.extend(["🔐 Ram's Collection", "🔐 Udi's Collection"])
+
+mode = st.sidebar.radio("Navigation", nav_options, index=0)
 st.sidebar.divider()
 
 if mode == "🔎 Set Analyzer":
@@ -491,12 +560,12 @@ if mode == "🔎 Set Analyzer":
 else:
     deep_scan = False
 
-if mode == "📊 Portfolio Manager":
-    st.title("📊 Portfolio Manager")
+if mode == "📊 Set Analyzer Database":
+    st.title("📊 Set Analyzer Database")
     
     col_filter, col_status = st.columns([2, 1])
     with col_filter:
-        collection_source = st.radio("Collection Source:", ["Ram's Collection", "Full Database"], horizontal=True)
+        collection_source = "Full Database"  # Always show full database
         # Mobile view is now global
         
         col_btn1, col_btn2 = st.columns(2)
@@ -526,11 +595,8 @@ if mode == "📊 Portfolio Manager":
                 st.error(f"Import failed: {e}")
     
     df_sets, df_figs = load_data()
+    # Show full database only
     
-    if collection_source == "Ram's Collection":
-        if not df_sets.empty: df_sets = df_sets[df_sets["InCollection"]]
-        if not df_figs.empty: df_figs = df_figs[df_figs["InCollection"]]
-        
     # Metrics
     # Metrics
     t_new = 0
@@ -540,12 +606,133 @@ if mode == "📊 Portfolio Manager":
     if not df_sets.empty:
         t_new += df_sets["New Price"].sum()
         t_used += df_sets["Used Price"].sum()
-        t_profit += df_sets["Profit"].sum()
+        # Only sum positive profits (actual investment opportunities)
+        t_profit += df_sets[df_sets["Profit"] > 0]["Profit"].sum()
         
     if not df_figs.empty:
         t_new += df_figs["New Price"].sum()
         t_used += df_figs["Used Price"].sum()
-        t_profit += df_figs["Profit"].sum()
+        # Only sum positive profits
+        t_profit += df_figs[df_figs["Profit"] > 0]["Profit"].sum()
+        
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Portfolio Value (New)", f"{t_new:,.0f} ₪")
+    m2.metric("Portfolio Value (Used)", f"{t_used:,.0f} ₪")
+    m3.metric("Total Profit Potential", f"{t_profit:,.0f} ₪")
+    
+    st.divider()
+    
+    # Single table view for all sets
+    st.subheader("📦 All Sets Database")
+    
+    if not df_sets.empty:
+        # Sort by profit descending by default
+        df_display = df_sets.sort_values("Profit", ascending=False)
+        
+        st.dataframe(
+            df_display,
+            width="stretch",
+            height=800,  # Double the default height
+            hide_index=True,
+            column_config={
+                "Image": st.column_config.ImageColumn("Img", width="small"),
+                "ID": st.column_config.TextColumn("ID", width="small"),
+                "Name": st.column_config.TextColumn("Name", width="medium"),
+                "New Price": st.column_config.NumberColumn("New Price", format="%.2f ₪"),
+                "Used Price": st.column_config.NumberColumn("Used Price", format="%.2f ₪"),
+                "Profit": st.column_config.NumberColumn("Profit", format="%.2f ₪"),
+                "Margin %": st.column_config.ProgressColumn("Margin", format="%.0f%%", min_value=-50, max_value=100),
+                "Rating": st.column_config.TextColumn("Rating", width="small"),
+                "New Conf": st.column_config.TextColumn("New Conf", width="small"),
+                "Used Conf": st.column_config.TextColumn("Used Conf", width="small"),
+                "Stale": st.column_config.CheckboxColumn("Stale", width="small"),
+                "InCollection": None  # Hide this column
+            }
+        )
+    else:
+        st.info("No sets in database. Use Set Analyzer to scan items.")
+    
+    # Minifigures Section
+    st.divider()
+    st.subheader("👥 Minifigures Database")
+    
+    if not df_figs.empty:
+        # Minifigure metrics
+        mf_new = df_figs["New Price"].sum()
+        mf_used = df_figs["Used Price"].sum()
+        mf_profit = df_figs[df_figs["Profit"] > 0]["Profit"].sum()
+        
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Minifigs Value (New)", f"{mf_new:,.0f} ₪")
+        c2.metric("Minifigs Value (Used)", f"{mf_used:,.0f} ₪")
+        c3.metric("Minifigs Profit Potential", f"{mf_profit:,.0f} ₪")
+        
+        # Minifigures table
+        df_figs_display = df_figs.sort_values("Profit", ascending=False)
+        
+        st.dataframe(
+            df_figs_display,
+            width="stretch",
+            height=600,
+            hide_index=True,
+            column_config={
+                "Image": st.column_config.ImageColumn("Img", width="small"),
+                "ID": st.column_config.TextColumn("ID", width="small"),
+                "Name": st.column_config.TextColumn("Name", width="medium"),
+                "New Price": st.column_config.NumberColumn("New Price", format="%.2f ₪"),
+                "Used Price": st.column_config.NumberColumn("Used Price", format="%.2f ₪"),
+                "Profit": st.column_config.NumberColumn("Profit", format="%.2f ₪"),
+                "Margin %": st.column_config.ProgressColumn("Margin", format="%.0f%%", min_value=-50, max_value=100),
+                "New Conf": st.column_config.TextColumn("New Conf", width="small"),
+                "Used Conf": st.column_config.TextColumn("Used Conf", width="small"),
+                "InCollection": None  # Hide this column
+            }
+        )
+    else:
+        st.info("No minifigures in database.")
+
+    st.sidebar.subheader("Actions")
+    del_id = st.sidebar.text_input("Delete Item ID")
+    if st.sidebar.button("Delete Item"):
+        if del_id:
+            delete_from_db(del_id)
+            st.cache_data.clear()
+            st.rerun()
+
+
+elif mode == "🔐 Ram's Collection":
+    st.title("🔐 Ram's Collection")
+    st.caption("Personal investment portfolio")
+    
+    # Load data filtered to Ram's Collection only
+    df_sets, df_figs = load_data()
+    
+    # Filter to Ram's Collection
+    if not df_sets.empty:
+        df_sets = df_sets[df_sets["InCollection"] == True]
+    if not df_figs.empty:
+        df_figs = df_figs[df_figs["InCollection"] == True]
+    
+    # Check if collection is empty
+    if df_sets.empty and df_figs.empty:
+        st.warning("📭 Ram's Collection is empty")
+        st.info("💡 Tip: Use the Set Analyzer to scan items, then they'll be automatically added to your collection")
+        st.stop()
+    
+    # Metrics
+    t_new = 0
+    t_used = 0
+    t_profit = 0
+    
+    if not df_sets.empty:
+        t_new += df_sets["New Price"].sum()
+        t_used += df_sets["Used Price"].sum()
+        t_profit += df_sets[df_sets["Profit"] > 0]["Profit"].sum()
+        
+    if not df_figs.empty:
+        t_new += df_figs["New Price"].sum()
+        t_used += df_figs["Used Price"].sum()
+        t_profit += df_figs[df_figs["Profit"] > 0]["Profit"].sum()
         
     m1, m2, m3 = st.columns(3)
     m1.metric("Portfolio Value (New)", f"{t_new:,.0f} ₪")
@@ -558,6 +745,37 @@ if mode == "📊 Portfolio Manager":
     
     with tab1:
         st.caption("High ROI Secured Sets (New)")
+        
+        # Profit Explanation
+        with st.expander("ℹ️ How is Profit Calculated?"):
+            st.markdown("""
+            **Profit Formula:**
+            ```
+            Profit = Market Price - (Cheapest Listing × 1.13)
+            ```
+            
+            **Breakdown:**
+            - **Market Price**: Estimated fair market value based on recent sales
+            - **Cheapest Listing**: Lowest priced "New" item currently available
+            - **1.13 multiplier**: Accounts for BrickLink fees (13%)
+            
+            **Margin %:**
+            ```
+            Margin % = (Profit / Cheapest Listing) × 100
+            ```
+            
+            **Rating System:**
+            - 🟢 **EXCELLENT**: Margin ≥ 20%
+            - 🟡 **GOOD**: Margin ≥ 10%
+            - 🔴 **IRRELEVANT**: Margin < 10%
+            
+            **Example:**
+            - Market Price: 500 ₪
+            - Cheapest Listing: 400 ₪
+            - Profit = 500 - (400 × 1.13) = 500 - 452 = **48 ₪**
+            - Margin = (48 / 400) × 100 = **12%** → GOOD
+            """)
+        
         if not df_sets.empty:
             df_new = df_sets[df_sets["New Price"] > 0].sort_values("Profit", ascending=False)
             
@@ -598,7 +816,7 @@ if mode == "📊 Portfolio Manager":
         if not df_figs.empty:
             mf_new = df_figs["New Price"].sum()
             mf_used = df_figs["Used Price"].sum()
-            mf_profit = df_figs["Profit"].sum()
+            mf_profit = df_figs[df_figs["Profit"] > 0]["Profit"].sum()
             
             st.caption("Minifigure Collection Stats")
             c1, c2, c3 = st.columns(3)
@@ -610,7 +828,114 @@ if mode == "📊 Portfolio Manager":
 
     st.sidebar.subheader("Actions")
     del_id = st.sidebar.text_input("Delete Item ID")
-    if st.sidebar.button("Delete Item"):
+    if st.sidebar.button("Delete Item", key="delete_rams"):
+        if del_id:
+            delete_from_db(del_id)
+            st.cache_data.clear()
+            st.rerun()
+
+
+elif mode == "🔐 Udi's Collection":
+    st.title("🔐 Udi's Collection")
+    st.caption("Personal investment portfolio")
+    
+    # Load data filtered to Udi's Collection only
+    df_sets, df_figs = load_data()
+    
+    # Filter to Udi's Collection (using a different collection name in database)
+    # Note: Items need to be added to "Udi's Collection" via Set Analyzer
+    if not df_sets.empty:
+        # For now, show empty until items are added to Udi's collection
+        df_sets = df_sets[df_sets.get("Collection", "") == "Udi's Collection"] if "Collection" in df_sets.columns else pd.DataFrame()
+    if not df_figs.empty:
+        df_figs = df_figs[df_figs.get("Collection", "") == "Udi's Collection"] if "Collection" in df_figs.columns else pd.DataFrame()
+    
+    # Check if collection is empty
+    if df_sets.empty and df_figs.empty:
+        st.warning("📭 Udi's Collection is empty")
+        st.info("💡 Tip: Use the Set Analyzer to scan items and add them to Udi's collection")
+        st.stop()
+    
+    # Metrics
+    t_new = 0
+    t_used = 0
+    t_profit = 0
+    
+    if not df_sets.empty:
+        t_new += df_sets["New Price"].sum()
+        t_used += df_sets["Used Price"].sum()
+        t_profit += df_sets[df_sets["Profit"] > 0]["Profit"].sum()
+        
+    if not df_figs.empty:
+        t_new += df_figs["New Price"].sum()
+        t_used += df_figs["Used Price"].sum()
+        t_profit += df_figs[df_figs["Profit"] > 0]["Profit"].sum()
+        
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Portfolio Value (New)", f"{t_new:,.0f} ₪")
+    m2.metric("Portfolio Value (Used)", f"{t_used:,.0f} ₪")
+    m3.metric("Total Profit Potential", f"{t_profit:,.0f} ₪")
+    
+    st.divider()
+    
+    tab1, tab2, tab3, tab4 = st.tabs(["💎 Investment Hub", "⚔️ Part-Out Strategist", "📦 All Items", "👥 Minifigures"])
+    
+    with tab1:
+        st.caption("High ROI Secured Sets (New)")
+        
+        if not df_sets.empty:
+            df_new = df_sets[df_sets["New Price"] > 0].sort_values("Profit", ascending=False)
+            
+            st.dataframe(
+                df_new,
+                width="stretch",
+                column_order=["Stale", "Image", "ID", "Name", "New Price", "New Conf", "Used Price", "Profit", "Margin %", "Rating"],
+                hide_index=True,
+                column_config={
+                    "Image": st.column_config.ImageColumn("Img", width="small"),
+                    "New Price": st.column_config.NumberColumn("New Price", format="%.2f ₪"),
+                    "Used Price": st.column_config.NumberColumn("Used Price", format="%.2f ₪"),
+                    "Profit": st.column_config.NumberColumn("Profit", format="%.2f ₪"),
+                    "Margin %": st.column_config.ProgressColumn("Margin", format="%.0f%%", min_value=-50, max_value=100)
+                }
+            )
+
+    with tab2:
+        st.caption("Undervalued Used Sets (High Minifig Value)")
+        if not df_sets.empty:
+            df_used = df_sets[df_sets["Used Price"] > 0].sort_values("Figs %", ascending=False)
+            st.dataframe(
+                df_used,
+                width="stretch",
+                column_order=["Stale", "Image", "ID", "Part-Out Alert", "Used Price", "Used Conf", "Total Figs Value", "Figs %"],
+                hide_index=True,
+                column_config={
+                    "Image": st.column_config.ImageColumn("Img", width="small"),
+                    "Part-Out Alert": st.column_config.TextColumn("Alert"),
+                    "Figs %": st.column_config.ProgressColumn("Figs %", format="%.0f%%", min_value=0, max_value=150)
+                }
+            )
+
+    with tab3:
+        st.dataframe(df_sets, width="stretch", hide_index=True, column_config={"Image": st.column_config.ImageColumn()})
+
+    with tab4:
+        if not df_figs.empty:
+            mf_new = df_figs["New Price"].sum()
+            mf_used = df_figs["Used Price"].sum()
+            mf_profit = df_figs[df_figs["Profit"] > 0]["Profit"].sum()
+            
+            st.caption("Minifigure Collection Stats")
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Minifigs Value (New)", f"{mf_new:,.0f} ₪")
+            c2.metric("Minifigs Value (Used)", f"{mf_used:,.0f} ₪")
+            c3.metric("Minifigs Profit", f"{mf_profit:,.0f} ₪")
+            
+        st.dataframe(df_figs, width="stretch", hide_index=True, column_config={"Image": st.column_config.ImageColumn()})
+
+    st.sidebar.subheader("Actions")
+    del_id = st.sidebar.text_input("Delete Item ID", key="udi_delete_input")
+    if st.sidebar.button("Delete Item", key="delete_udis"):
         if del_id:
             delete_from_db(del_id)
             st.cache_data.clear()
