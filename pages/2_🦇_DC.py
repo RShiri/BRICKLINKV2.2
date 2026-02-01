@@ -63,14 +63,18 @@ def load_dc_data():
             is_exclusive = "exclusive" in name_lower or "sdcc" in name_lower or "nycc" in name_lower
             
             # Big Figures: Detect by explicit keywords OR specific IDs known to be big figs
+            # Note: All big figures have at least 7 parts and most have Giant Arms/Hands (part 43093)
             is_big_fig = (
                 "big fig" in name_lower or 
                 "bigfig" in name_lower or
                 "giant" in name_lower or
-                # Specific big figure characters (verified from BrickLink)
-                # Bane big figures: sh017, sh106, sh238, sh414
-                # Killer Croc big figures: sh041, sh205, sh334, sh513
-                (meta.get("item_id") in ["sh017", "sh106", "sh238", "sh414", "sh041", "sh205", "sh334", "sh513"])
+                # Verified DC big figures from BrickLink
+                # Bane: sh017, sh106, sh238, sh414, sh230, sh504
+                # Killer Croc: sh041, sh205, sh334, sh513
+                (meta.get("item_id") in [
+                    "sh017", "sh106", "sh238", "sh414", "sh230", "sh504",  # Bane
+                    "sh041", "sh205", "sh334", "sh513"  # Killer Croc
+                ])
             )
             
             display_data.append({
