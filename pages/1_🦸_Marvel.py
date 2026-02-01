@@ -60,15 +60,14 @@ def load_marvel_data():
             # Categorization logic - improved Big Figures detection
             is_exclusive = "exclusive" in name_lower or "sdcc" in name_lower or "nycc" in name_lower
             
-            # Big Figures: Only actual big figure variants
-            # Check for explicit "big fig" or "giant" keywords
-            # OR specific character names that are ONLY available as big figs
+            # Big Figures: Detect by explicit keywords OR specific IDs known to be big figs
             is_big_fig = (
                 "big fig" in name_lower or 
                 "bigfig" in name_lower or
                 "giant" in name_lower or
-                # Hulk big figures (but not regular Hulk)
-                ("hulk" in name_lower and ("big" in name_lower or "giant" in name_lower))
+                # Specific big figure characters (check ID patterns)
+                # Thanos big figures have specific IDs: sh353, sh496, sh568, sh614
+                (meta.get("item_id") in ["sh353", "sh496", "sh568", "sh614"])  # Thanos big figs
             )
             
             display_data.append({

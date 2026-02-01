@@ -62,12 +62,15 @@ def load_dc_data():
             # Categorization logic - improved Big Figures detection
             is_exclusive = "exclusive" in name_lower or "sdcc" in name_lower or "nycc" in name_lower
             
-            # Big Figures: Only actual big figure variants
-            # Check for explicit "big fig" or "giant" keywords only
+            # Big Figures: Detect by explicit keywords OR specific IDs known to be big figs
             is_big_fig = (
                 "big fig" in name_lower or 
                 "bigfig" in name_lower or
-                "giant" in name_lower
+                "giant" in name_lower or
+                # Specific big figure characters (check ID patterns)
+                # Bane big figures: sh017, sh106, sh238
+                # Killer Croc big figures: sh041, sh205, sh334, sh513
+                (meta.get("item_id") in ["sh017", "sh106", "sh238", "sh041", "sh205", "sh334", "sh513"])
             )
             
             display_data.append({
