@@ -61,10 +61,13 @@ def load_marvel_data():
             is_exclusive = "exclusive" in name_lower or "sdcc" in name_lower or "nycc" in name_lower
             
             # Big Figures: Detect by explicit keywords OR specific IDs known to be big figs
+            # Exclude "giant-man" as that's a character name, not a big figure indicator
+            has_giant_keyword = "giant" in name_lower and "giant-man" not in name_lower
+            
             is_big_fig = (
                 "big fig" in name_lower or 
                 "bigfig" in name_lower or
-                "giant" in name_lower or
+                has_giant_keyword or
                 # Specific big figure characters (verified from BrickLink)
                 # Thanos big figures: sh353, sh496, sh568, sh614, sh651
                 (meta.get("item_id") in ["sh353", "sh496", "sh568", "sh614", "sh651"])
