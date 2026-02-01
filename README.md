@@ -1,108 +1,170 @@
-# 🧱 BrickLink Pricer & Sniper
+# 🧱 BrickLink Sniper Dashboard
 
-A powerful Python toolkit for scraping BrickLink market data, analyzing trends, identifying "Sniper" deals, and calculating Part Out Values (POV). Includes a CLI for data gathering and a Streamlit dashboard for visual analytics.
+A comprehensive Streamlit dashboard for analyzing BrickLink market data, tracking collections, and discovering profitable LEGO deals. Features role-based access control, superhero minifigure databases, and advanced pricing analytics.
 
 ## ✨ Features
 
-### 🔍 CLI Scraper (`runner.py`)
-- **Market Pricing**: Scrapes "New" and "Used" market prices for Sets and Minifigures.
-- **Trend Analysis**: Tracks price changes over time (▲/▼) and displays percentage shifts.
-- **Deal Finding ("Sniper")**: Identifies underpriced listings based on calculated market value.
-- **Part Out Value (POV)**: Estimates profitable breakdown values for sets.
-- **Minifigure Breakdown**: Automatically fetches and values all minifigures within a set.
-- **Data Integrity**: Intelligent outlier filtering and integrity checks (listings vs sales).
-- **Caching**: Local caching to minimize repeated scrapes.
+### 🔐 User/Admin Access System
+- **Landing Page**: Choose between User (public) or Admin (password-protected) mode
+- **Role-Based Navigation**: Different features available based on access level
+- **Admin Password**: 7399 (for full access to collections)
 
-### 📊 Dashboard (`dashboard.py`)
-- **Interactive Analytics**: Sortable tables for Sets and Minifigures.
-- **Profit Tracking**: Visualizes potential profit margins and "Sniper" ratings.
-- **Collection Management**: Filter between "Ram's Collection" and the full database.
-- **Drill-Down Details**: Inspect individual set components and minifigures.
-- **Visuals**: Displays set/minifigure images directly in the UI.
+### 📊 Dashboard Modes
 
-## 🚀 Installation
+#### **User Mode** (Public Access)
+- **Set Analyzer**: Analyze LEGO sets with market pricing and profit calculations
+- **Set Analyzer Database**: Browse all analyzed sets with filtering and sorting
+- **Marvel Database**: Browse Marvel superhero minifigures (2005+) with pricing
+- **DC Database**: Browse DC superhero minifigures (2005+) with pricing
 
-1.  **Clone the repository**:
-    ```bash
-    git clone https://github.com/yourusername/bricklink-pricer.git
-    cd bricklink-pricer
-    ```
+#### **Admin Mode** (Password Required)
+All User Mode features plus:
+- **🔐 Ram's Collection**: Personal investment portfolio with analytics
+- **🔐 Udi's Collection**: Secondary collection tracking
 
-2.  **Install dependencies**:
-    ```bash
-    pip install -r requirements.txt
-    ```
-    *Dependencies include: `selenium`, `beautifulsoup4`, `streamlit`, `pandas`, `colorama`, `tqdm`.*
+### 🦸 Superhero Databases
+- **Separate Marvel & DC Pages**: Dedicated pages for each universe
+- **Categorization**: Standard, Exclusives, and Big Figures tabs
+- **Big Figures Detection**: Automatically identifies big figures (7+ parts, Giant Arms/Hands)
+- **Filtering**: Year-based filtering and multiple sort options
+- **View Modes**: Table (default) or Gallery view
+- **Export**: CSV export for each category
+- **Debug Tools**: Built-in debug section to verify big figure detection
 
-3.  **Driver Setup**:
-    - Ensure you have a compatible WebDriver (e.g., ChromeDriver) installed if Selenium requires it, although modern Selenium often manages this automatically.
+### 💰 Pricing Engine
+- **Market Analysis**: Scrapes "New" and "Used" prices from BrickLink
+- **Confidence Levels**: HIGH/MEDIUM/LOW based on sales volume
+- **Outlier Filtering**: Intelligent removal of incomplete sets and scams
+- **Part Out Value (POV)**: Estimates profitable breakdown values
+- **Minifigure Breakdown**: Automatic valuation of all minifigures in sets
 
-## 🛠️ Usage
+### 📈 Analytics Features
+- **Profit Tracking**: Visual profit margins and "Sniper" ratings
+- **Trend Analysis**: Price change tracking (▲/▼ with percentages)
+- **Interactive Tables**: Sortable, filterable data tables
+- **Image Display**: Set and minifigure images directly in UI
+- **Drill-Down Details**: Inspect individual components
 
-### 1. The CLI Runner (`runner.py`)
-Use this to fetch data.
+## 🚀 Quick Start
 
-**Basic Usage:**
-```bash
-python runner.py 75192 10188
-```
-*Fetches data for sets 75192 and 10188.*
+### Installation
 
-**Force Refresh:**
-```bash
-python runner.py 75192 --force
-```
-*Ignores cache and scrapes fresh data.*
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/RShiri/BRICKLINKV2.2.git
+   cd BRICKLINKV2.2
+   ```
 
-**Specific Type:**
-```bash
-python runner.py sw0001 --type M
-```
-*Explicitly treats the ID as a Minifigure (`M`). The tool usually auto-detects this.*
+2. **Install dependencies**:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-### 2. The Dashboard (`dashboard.py`)
-Use this to visualize the data.
+3. **Run the dashboard**:
+   ```bash
+   streamlit run dashboard.py
+   ```
 
-```bash
-streamlit run dashboard.py
-```
-*Opens the dashboard in your default web browser (usually http://localhost:8501).*
+4. **Access the app**:
+   - Opens at `http://localhost:8501`
+   - Choose User or Admin mode on landing page
+   - Admin password: `7399`
 
 ## 📂 Project Structure
 
-- `runner.py`: Main CLI entry point.
-- `scraper.py`: Selenium/BS4 scraping logic.
-- `pricing_engine.py`: Data analysis and pricing algorithms.
-- `dashboard.py`: Streamlit frontend.
-- `database.py`: SQLite database handler (`bricklink_data.db`).
-- `data/`: Backup/migration data.
-- `cache/`: Temporary cache files.
+```
+V2.2/
+├── dashboard.py              # Main Streamlit dashboard
+├── database.py               # SQLite database handler
+├── scraper.py                # BrickLink web scraper
+├── pricing_engine.py         # Market analysis algorithms
+├── pages/
+│   ├── 1_🦸_Marvel.py       # Marvel minifigure database
+│   └── 2_🦇_DC.py           # DC minifigure database
+├── scan_superheroes.py       # Superhero minifig scanner
+├── scan_catalog.py           # Catalog-based scanner
+├── scan_all_minifigs.py      # Universal minifig scanner
+├── bricklink_data.db         # SQLite database
+└── backup/                   # Archived files
+```
+
+## 🛠️ Scanners
+
+### Scan Superheroes
+```bash
+python scan_superheroes.py
+```
+Scans all superhero minifigures (sh001-sh999) from BrickLink.
+
+### Scan Catalog
+```bash
+python scan_catalog.py
+```
+Scans specific sets from a predefined catalog.
+
+### Scan All Minifigs
+```bash
+python scan_all_minifigs.py
+```
+Universal scanner for any minifigure range.
+
+## 🧠 Pricing Algorithm
+
+### Data Cleaning
+- **Blacklist Filter**: Removes "incomplete", "no minifigs", "box only" listings
+- **Dynamic Price Floor**: 
+  - 60% of median for most items
+  - 1 ILS floor for 2025 releases (early market data)
+
+### Market Price Calculation
+
+| Sales Volume | Formula | Confidence |
+|:-------------|:--------|:-----------|
+| **10+ sales** | `(70% × Sold Avg) + (30% × Stock)` | HIGH |
+| **1-9 sales** | `100% × Sold Avg` | MEDIUM |
+| **0 sales** | `100% × Stock Price` | LOW |
+
+**Stock Price** = Competitive Anchor (average of cheapest 35% of listings)
+
+## 🦸 Big Figures Detection
+
+Big figures are identified by:
+- **Keywords**: "Big Fig", "BigFig", or "Giant" in name
+- **Part Count**: Minimum 7 parts
+- **Giant Parts**: Most have Giant Arms/Hands (part 43093)
+- **Verified IDs**: Manually verified big figure IDs
+
+**Marvel Big Figures**: Thanos variants, Cull Obsidian, Hulk giants  
+**DC Big Figures**: Bane, Killer Croc variants
+
+## 📊 Database Schema
+
+### Collections Table
+- `id`, `item_id`, `item_type`, `collection_name`
+- `purchase_price`, `purchase_date`, `notes`
+
+### Items Cache
+- Stores scraped BrickLink data
+- Includes metadata, pricing, and analysis results
+
+## 🔒 Security Notes
+
+- Admin password is hardcoded (7399) - change in production
+- Session state manages authentication
+- No sensitive data stored in database
 
 ## 🤝 Contributing
-Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
 
-## 🧠 Pricing Engine Logic
-
-The tool uses a multi-step algorithm to determine the "Market Value" of a set.
-
-### 1. Data Cleaning
--   **Blacklist Filter**: Removes listings with words like "incomplete", "no minifigs", "box only".
--   **Price Floor**:
-    -   Calculates the global median price for the item.
-    -   Removes any listing that is **< 60%** of the median (filters out scams or partial sets).
-    -   *Exception*: Sets released in **2025** have a floor of 1 ILS to allow early market data.
-
-### 2. Market Price Algorithm
-The price is determined based on the **volume of sales**:
-
-| Sales Count (Sold Items) | Calculation Logic | Confidence Level |
-| :--- | :--- | :--- |
-| **High Volume (10+)** | `(70% × Sold Avg) + (30% × Stock Price)` | **HIGH** |
-| **Low Volume (1-9)** | `100% × Sold Avg` (Stock ignored) | **MEDIUM** |
-| **No Sales (0)** | `100% × Stock Price` | **LOW** |
-
-> **Note**: "Stock Price" is not a simple average. It uses a "Competitive Anchor" which averages only the **cheapest 35%** of listings to reflect realistic sellable prices rather than overpriced wishlist items.
-
+Pull requests welcome! For major changes, open an issue first.
 
 ## 📄 License
+
 [MIT](https://choosealicense.com/licenses/mit/)
+
+## 🎯 Roadmap
+
+- [ ] User-configurable admin password
+- [ ] Export collections to CSV
+- [ ] Price history charts
+- [ ] Email alerts for "Sniper" deals
+- [ ] Multi-user support with individual collections
