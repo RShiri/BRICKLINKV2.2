@@ -37,6 +37,8 @@ if "user_role" not in st.session_state:
     st.session_state.user_role = None
 if "admin_authenticated" not in st.session_state:
     st.session_state.admin_authenticated = False
+if "show_about_me" not in st.session_state:
+    st.session_state.show_about_me = False
 
 # Role selection page
 if st.session_state.user_role is None:
@@ -58,6 +60,9 @@ if st.session_state.user_role is None:
         if st.button("🔑 Enter as Admin", use_container_width=True):
             st.session_state.user_role = "admin"
             st.rerun()
+    
+    st.divider()
+    render_about_me_content()
     
     st.stop()
 
@@ -90,6 +95,7 @@ st.sidebar.markdown(f"**Mode:** {'🔐 Admin' if st.session_state.user_role == '
 if st.sidebar.button("🔄 Switch Mode"):
     st.session_state.user_role = None
     st.session_state.admin_authenticated = False
+    st.session_state.show_about_me = False
     st.rerun()
 st.sidebar.divider()
 
@@ -120,6 +126,46 @@ def render_gallery_html(images, captions):
     html += "</div>"
 
     st.markdown(html, unsafe_allow_html=True)
+
+def render_about_me_content():
+    """Renders the About Me content (shared between Login and standalone page)."""
+    st.title("About the Creator")
+    
+    c1, c2 = st.columns([1, 2.5])
+    
+    with c1:
+        st.image("assets/ram_shiri_profile.png", caption="Ram Shiri", width=200)
+        st.markdown("### Ram Shiri")
+        st.markdown("**Data Engineering Student**")
+        st.link_button("Connect on LinkedIn", "https://www.linkedin.com/in/ram-shiri-1a1056304/?originalSubdomain=il")
+    
+    with c2:
+        st.subheader("👋 Hello!")
+        st.write("""
+        I'm a **3rd year B.Sc. Data Engineering student** specializing in data science with a passion for building smart, practical solutions. 
+        """)
+        st.write("""
+        I love combining creativity with technical skills to drive real-world impact—especially in the world of sports analytics.
+        """)
+        
+        st.subheader("🛠️ Skills & Approach")
+        st.write("""
+        - **Tech Stack:** Python, Java, SQL, Pandas, Streamlit, Plotly
+        - **Soft Skills:** Creative thinking, fast learning, hands-on problem solving
+        - **Philosophy:** Comfortable working with AI tools to accelerate development (like this dashboard!) while maintaining deep understanding of the core logic.
+        """)
+        
+        st.subheader("❤️ Passions")
+        st.write("🏀 Basketball | ⚽ Football | 🏎️ F1 Racing | 🧱 LEGO")
+        
+        st.divider()
+        st.info("🚀 **Open to Work:** Actively seeking a student or full-time position in software or data engineering to grow, contribute, and thrive in a dynamic environment.")
+
+def render_about_me_page():
+    if st.button("← Back to Dashboard"):
+        st.session_state.show_about_me = False
+        st.rerun()
+    render_about_me_content()
 
 def delete_from_db(item_id):
     """Deletes an item from the database."""
@@ -547,6 +593,17 @@ if st.session_state.user_role == "admin":
     nav_options.extend(["🔐 Ram's Collection", "🔐 Udi's Collection"])
 
 mode = st.sidebar.radio("Navigation", nav_options, index=0)
+
+# Separate About Me Section
+st.sidebar.divider()
+if st.sidebar.button("👨‍💻 About Me"):
+    st.session_state.show_about_me = True
+    st.rerun()
+
+if st.session_state.show_about_me:
+    render_about_me_page()
+    st.stop()
+
 st.sidebar.divider()
 
 if mode == "🔎 Set Analyzer":
@@ -1147,3 +1204,6 @@ elif mode == "🔎 Set Analyzer":
                         st.cache_data.clear()
                     else:
                         st.error(res.get("error"))
+
+    else:
+        st.error(res.get("error"))
