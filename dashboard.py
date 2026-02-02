@@ -265,33 +265,7 @@ def create_console_report(item_id, result, minifig_details, mf_new, mf_used):
     lines.append(f"\n{'='*70}")
     return "\n".join(lines)
 
-def render_mobile_card(item):
-    """Renders a simplified HTML card for mobile view."""
-    color = "#e6ffe6" if item['Profit'] > 0 else "#fff0f0"
-    
-    html = f"""
-    <div style="background: white; border-radius: 10px; padding: 10px; margin-bottom: 10px; border: 1px solid #eee; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
-        <div style="display: flex; gap: 10px; align-items: start;">
-            <div style="width: 60px; height: 60px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: #f9f9f9; border-radius: 5px;">
-                <img src="{item['Image']}" style="max-width: 100%; max-height: 100%;">
-            </div>
-            <div style="flex-grow: 1;">
-                <div style="font-weight: 600; font-size: 14px; margin-bottom: 2px;">{item['ID']} - {item['Name']}</div>
-                <div style="font-size: 12px; color: #666; display: flex; gap: 8px;">
-                    <span>🆕 <span style="color: #333; font-weight: 500;">{item['New Price']:.0f}₪</span></span>
-                    <span>🏷️ <span style="color: #333; font-weight: 500;">{item['Used Price']:.0f}₪</span></span>
-                </div>
-            </div>
-            <div style="text-align: right;">
-                <div style="font-weight: 700; color: {'green' if item['Profit'] > 0 else 'red'}; font-size: 14px;">
-                    {item['Profit']:+.0f}₪
-                </div>
-                <div style="font-size: 10px; color: #999;">{item['Rating']}</div>
-            </div>
-        </div>
-    </div>
-    """
-    st.markdown(html, unsafe_allow_html=True)
+
 
 def process_analysis(item_id, deep_scan_enabled, force_scrape=False, progress_callback=None):
     """
@@ -600,6 +574,8 @@ if st.session_state.user_role == "admin":
 
 mode = st.sidebar.radio("Navigation", nav_options, index=0)
 
+
+
 # Separate About Me Section
 st.sidebar.divider()
 if st.sidebar.button("👨‍💻 About Me"):
@@ -629,7 +605,7 @@ if mode == "📊 Set Analyzer Database":
     col_filter, col_status = st.columns([2, 1])
     with col_filter:
         collection_source = "Full Database"  # Always show full database
-        # Mobile view is now global
+
         
         col_btn1, col_btn2 = st.columns(2)
         if col_btn1.button("🔄 Refresh Data"):
@@ -1035,13 +1011,9 @@ elif mode == "🔎 Set Analyzer":
             if "expanders" in msg:
                 for item in msg["expanders"]:
                     with st.expander(f"📄 Report: {item['id']} - {item['name']}"):
-                        if mobile_view:
-                            st.image(item['main_img'], width=200)
-                            st.code(item['report'], language="text")
-                        else:
-                            col_img, col_txt = st.columns([1,5])
-                            with col_img: st.image(item['main_img'], width="stretch")
-                            with col_txt: st.code(item['report'], language="text")
+                        col_img, col_txt = st.columns([1,5])
+                        with col_img: st.image(item['main_img'], width="stretch")
+                        with col_txt: st.code(item['report'], language="text")
                             
                         if item['images']:
                             st.write("### Minifigures")
