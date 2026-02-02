@@ -103,30 +103,6 @@ st.sidebar.divider()
 def get_scraper():
     return BrickLinkScraper()
 
-def get_img_url(item_id):
-    item_id = str(item_id).strip()
-    is_fig = any(c.isalpha() for c in item_id)
-    if is_fig:
-        return f"https://img.bricklink.com/ItemImage/MN/0/{item_id}.png"
-    else:
-        img_id = item_id if "-" in item_id else f"{item_id}-1"
-        return f"https://img.bricklink.com/ItemImage/SN/0/{img_id}.png"
-
-def render_gallery_html(images, captions):
-    """
-    Renders a responsive, aligned gallery using HTML/CSS because st.image 
-    doesn't support fixed height/aspect-ratio control well.
-    """
-    html = '<div style="display: flex; flex-wrap: wrap; gap: 15px; margin-top: 10px; justify-content: center; width: 100%;">'
-    
-    for img, cap in zip(images, captions):
-        caption_html = cap.replace('\n', '<br>')
-        html += f"""<div style="display: flex; flex-direction: column; align-items: center; width: 110px;"><div style="height: 110px; display: flex; align-items: center; justify-content: center; overflow: hidden; background: #f9f9f9; border-radius: 8px; border: 1px solid #eee;"><img src="{img}" style="max-width: 100%; max-height: 100%; object-fit: contain;"></div><div style="font-size: 12px; text-align: center; margin-top: 5px; color: #555; line-height: 1.2;">{caption_html}</div></div>"""
-    
-    html += "</div>"
-
-    st.markdown(html, unsafe_allow_html=True)
-
 def render_about_me_content():
     """Renders the About Me content (shared between Login and standalone page)."""
     st.title("About the Creator")
@@ -166,6 +142,32 @@ def render_about_me_page():
         st.session_state.show_about_me = False
         st.rerun()
     render_about_me_content()
+
+def get_img_url(item_id):
+    item_id = str(item_id).strip()
+    is_fig = any(c.isalpha() for c in item_id)
+    if is_fig:
+        return f"https://img.bricklink.com/ItemImage/MN/0/{item_id}.png"
+    else:
+        img_id = item_id if "-" in item_id else f"{item_id}-1"
+        return f"https://img.bricklink.com/ItemImage/SN/0/{img_id}.png"
+
+def render_gallery_html(images, captions):
+    """
+    Renders a responsive, aligned gallery using HTML/CSS because st.image 
+    doesn't support fixed height/aspect-ratio control well.
+    """
+    html = '<div style="display: flex; flex-wrap: wrap; gap: 15px; margin-top: 10px; justify-content: center; width: 100%;">'
+    
+    for img, cap in zip(images, captions):
+        caption_html = cap.replace('\n', '<br>')
+        html += f"""<div style="display: flex; flex-direction: column; align-items: center; width: 110px;"><div style="height: 110px; display: flex; align-items: center; justify-content: center; overflow: hidden; background: #f9f9f9; border-radius: 8px; border: 1px solid #eee;"><img src="{img}" style="max-width: 100%; max-height: 100%; object-fit: contain;"></div><div style="font-size: 12px; text-align: center; margin-top: 5px; color: #555; line-height: 1.2;">{caption_html}</div></div>"""
+    
+    html += "</div>"
+
+    st.markdown(html, unsafe_allow_html=True)
+
+
 
 def delete_from_db(item_id):
     """Deletes an item from the database."""
