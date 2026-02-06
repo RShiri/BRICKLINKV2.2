@@ -529,7 +529,8 @@ def load_data():
                 "Margin %": sniper.get("margin_pct", 0),
                 "Rating": sniper.get("rating", "N/A"),
                 "InCollection": item_id.lower() in collection_ids,
-                "Stale": "⚠️" if is_stale else "✅"
+                "Stale": "⚠️" if is_stale else "✅",
+                "Last Scraped": row[2] if len(row) > 2 else None
             }
             if any(c.isalpha() for c in item_id): figs.append(item)
             else: sets.append(item)
@@ -685,7 +686,8 @@ if mode == "📊 Set Analyzer Database":
                 "New Conf": st.column_config.TextColumn("New Conf", width="small"),
                 "Used Conf": st.column_config.TextColumn("Used Conf", width="small"),
                 "Stale": st.column_config.CheckboxColumn("Stale", width="small"),
-                "InCollection": None  # Hide this column
+                "InCollection": None,  # Hide this column
+                "Last Scraped": st.column_config.DatetimeColumn("Last Scraped", format="DD/MM/YYYY HH:mm") if st.session_state.user_role == "admin" else None
             }
         )
     else:
@@ -724,19 +726,21 @@ if mode == "📊 Set Analyzer Database":
                 "Margin %": st.column_config.ProgressColumn("Margin", format="%.0f%%", min_value=-50, max_value=100),
                 "New Conf": st.column_config.TextColumn("New Conf", width="small"),
                 "Used Conf": st.column_config.TextColumn("Used Conf", width="small"),
-                "InCollection": None  # Hide this column
+                "InCollection": None,  # Hide this column
+                "Last Scraped": st.column_config.DatetimeColumn("Last Scraped", format="DD/MM/YYYY HH:mm") if st.session_state.user_role == "admin" else None
             }
         )
     else:
         st.info("No minifigures in database.")
 
-    st.sidebar.subheader("Actions")
-    del_id = st.sidebar.text_input("Delete Item ID")
-    if st.sidebar.button("Delete Item"):
-        if del_id:
-            delete_from_db(del_id)
-            st.cache_data.clear()
-            st.rerun()
+    if st.session_state.user_role == "admin":
+        st.sidebar.subheader("Actions")
+        del_id = st.sidebar.text_input("Delete Item ID")
+        if st.sidebar.button("Delete Item"):
+            if del_id:
+                delete_from_db(del_id)
+                st.cache_data.clear()
+                st.rerun()
 
 
 elif mode == "🔐 Ram's Collection":
