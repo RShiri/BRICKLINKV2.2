@@ -175,13 +175,26 @@ def render_gallery_html(images, captions):
 
 def delete_from_db(item_id):
     """Deletes an item from the database."""
+    item_id = str(item_id).strip()
     db = Database()
     try:
-        db.cursor.execute("DELETE FROM items WHERE item_id = ?", (item_id,))
-        db.cursor.execute("DELETE FROM inventory_lists WHERE set_id = ?", (item_id,))
+        # PostgreSQL uses %s, not ?
+        db.cursor.execute("DELETE FROM items WHERE item_id = %s", (item_id,))
+        deleted_items = db.cursor.rowcount
+        
+        db.cursor.execute("DELETE FROM inventory_lists WHERE set_id = %s", (item_id,))
+        
+        # Remove from collections (Ram's and Udi's) - Best effort
         db.remove_from_collection(item_id, "Ram's Collection") 
+        db.remove_from_collection(item_id, "Udi's Collection")
+        
         db.conn.commit()
-        st.toast(f"Deleted {item_id}", icon="🗑️")
+        
+        if deleted_items > 0:
+            st.toast(f"Deleted {item_id} (and associated data)", icon="🗑️")
+        else:
+            st.toast(f"Item {item_id} not found in main DB", icon="⚠️")
+            
     except Exception as e:
         st.error(f"Delete failed: {e}")
     finally:
