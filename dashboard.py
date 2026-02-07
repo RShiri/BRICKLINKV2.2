@@ -748,12 +748,32 @@ if mode == "📊 Set Analyzer Database":
 
     if st.session_state.user_role == "admin":
         st.sidebar.subheader("Actions")
-        del_id = st.sidebar.text_input("Delete Item ID")
-        if st.sidebar.button("Delete Item"):
+        del_id = st.sidebar.text_input("Delete Item ID(s)", help="Enter single ID or space-separated IDs for bulk delete (e.g., '75001 75002 sw0001')")
+        if st.sidebar.button("🗑️ Delete Item(s)"):
             if del_id:
-                delete_from_db(del_id)
-                st.cache_data.clear()
-                st.rerun()
+                # Parse multiple IDs (space or comma separated)
+                ids_to_delete = del_id.replace(',', ' ').split()
+                ids_to_delete = [id.strip() for id in ids_to_delete if id.strip()]
+                
+                if len(ids_to_delete) > 1:
+                    # Bulk delete
+                    success_count = 0
+                    for item_id in ids_to_delete:
+                        try:
+                            delete_from_db(item_id)
+                            success_count += 1
+                        except Exception as e:
+                            st.sidebar.error(f"Failed to delete {item_id}: {e}")
+                    
+                    st.sidebar.success(f"✅ Deleted {success_count}/{len(ids_to_delete)} items")
+                    st.cache_data.clear()
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    # Single delete
+                    delete_from_db(ids_to_delete[0])
+                    st.cache_data.clear()
+                    st.rerun()
 
     # 🎯 SNIPER WAR ROOM - Hot Deals Dashboard
     st.divider()
@@ -933,12 +953,32 @@ elif mode == "🔐 Ram's Collection":
         st.dataframe(df_figs, width="stretch", hide_index=True, column_config={"Image": st.column_config.ImageColumn()})
 
     st.sidebar.subheader("Actions")
-    del_id = st.sidebar.text_input("Delete Item ID")
-    if st.sidebar.button("Delete Item", key="delete_rams"):
+    del_id = st.sidebar.text_input("Delete Item ID(s)", key="delete_rams_input", help="Enter single ID or space-separated IDs for bulk delete")
+    if st.sidebar.button("🗑️ Delete Item(s)", key="delete_rams"):
         if del_id:
-            delete_from_db(del_id)
-            st.cache_data.clear()
-            st.rerun()
+            # Parse multiple IDs
+            ids_to_delete = del_id.replace(',', ' ').split()
+            ids_to_delete = [id.strip() for id in ids_to_delete if id.strip()]
+            
+            if len(ids_to_delete) > 1:
+                # Bulk delete
+                success_count = 0
+                for item_id in ids_to_delete:
+                    try:
+                        delete_from_db(item_id)
+                        success_count += 1
+                    except Exception as e:
+                        st.sidebar.error(f"Failed to delete {item_id}: {e}")
+                
+                st.sidebar.success(f"✅ Deleted {success_count}/{len(ids_to_delete)} items")
+                st.cache_data.clear()
+                time.sleep(1)
+                st.rerun()
+            else:
+                # Single delete
+                delete_from_db(ids_to_delete[0])
+                st.cache_data.clear()
+                st.rerun()
 
 
 elif mode == "🔐 Udi's Collection":
@@ -1230,21 +1270,25 @@ elif mode == "🔎 Set Analyzer":
                         })
                         st.toast(f"✅ {item_id} analyzed!", icon="💾")
                         
-                        # Manual Add to Collection
-                        col_db, col_ram = st.columns(2)
-                        
-                        with col_db:
-                            st.button("✅ Saved to Global DB", disabled=True, help="This item is already auto-saved to the main database.")
+                        # Manual Add to Collection (Admin Only)
+                        if st.session_state.user_role == "admin":
+                            col_db, col_ram = st.columns(2)
                             
-                        with col_ram:
-                            if st.button(f"➕ Add to Ram's Collection"):
-                                db = Database()
-                                db.add_to_collection(item_id, "Ram's Collection")
-                                db.close()
-                                st.toast(f"Added {item_id} to Ram's Collection", icon="📂")
-                                st.cache_data.clear()
-                                time.sleep(1)
-                                st.rerun()
+                            with col_db:
+                                st.button("✅ Saved to Global DB", disabled=True, help="This item is already auto-saved to the main database.")
+                                
+                            with col_ram:
+                                if st.button(f"➕ Add to Ram's Collection"):
+                                    db = Database()
+                                    db.add_to_collection(item_id, "Ram's Collection")
+                                    db.close()
+                                    st.toast(f"Added {item_id} to Ram's Collection", icon="📂")
+                                    st.cache_data.clear()
+                                    time.sleep(1)
+                                    st.rerun()
+                        else:
+                            # User mode: Just show confirmation that item is saved
+                            st.success("✅ Item saved to database successfully!")
 
                         st.cache_data.clear()
                     else:
