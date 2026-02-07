@@ -682,27 +682,78 @@ if mode == "📊 Set Analyzer Database":
         # Sort by profit descending by default
         df_display = df_sets.sort_values("Profit", ascending=False)
         
-        st.dataframe(
-            df_display,
-            width="stretch",
-            height=800,  # Double the default height
-            hide_index=True,
-            column_config={
-                "Image": st.column_config.ImageColumn("Img", width="small"),
-                "ID": st.column_config.TextColumn("ID", width="small"),
-                "Name": st.column_config.TextColumn("Name", width="medium"),
-                "New Price": st.column_config.NumberColumn("New Price", format="%.2f ₪"),
-                "Used Price": st.column_config.NumberColumn("Used Price", format="%.2f ₪"),
-                "Profit": st.column_config.NumberColumn("Profit", format="%.2f ₪"),
-                "Margin %": st.column_config.ProgressColumn("Margin", format="%.0f%%", min_value=-50, max_value=100),
-                "Rating": st.column_config.TextColumn("Rating", width="small"),
-                "New Conf": st.column_config.TextColumn("New Conf", width="small"),
-                "Used Conf": st.column_config.TextColumn("Used Conf", width="small"),
-                "Stale": st.column_config.CheckboxColumn("Stale", width="small"),
-                "InCollection": None,  # Hide this column
-                "Last Scraped": st.column_config.DatetimeColumn("Last Scraped", format="DD/MM/YYYY HH:mm") if st.session_state.user_role == "admin" else None
-            }
-        )
+        if st.session_state.user_role == "admin":
+            # Interactive Editor for Admins (Select to Delete)
+            df_display["Select"] = False
+            
+            # Reorder columns to put Select first
+            cols = ["Select"] + [c for c in df_display.columns if c != "Select"]
+            df_display = df_display[cols]
+            
+            edited_df = st.data_editor(
+                df_display,
+                width=None, # Stretch
+                height=800,
+                hide_index=True,
+                column_config={
+                    "Select": st.column_config.CheckboxColumn("🗑️", width="small", help="Select to delete"),
+                    "Image": st.column_config.ImageColumn("Img", width="small"),
+                    "ID": st.column_config.TextColumn("ID", width="small"),
+                    "Name": st.column_config.TextColumn("Name", width="medium"),
+                    "New Price": st.column_config.NumberColumn("New Price", format="%.2f ₪"),
+                    "Used Price": st.column_config.NumberColumn("Used Price", format="%.2f ₪"),
+                    "Profit": st.column_config.NumberColumn("Profit", format="%.2f ₪"),
+                    "Margin %": st.column_config.ProgressColumn("Margin", format="%.0f%%", min_value=-50, max_value=100),
+                    "Rating": st.column_config.TextColumn("Rating", width="small"),
+                    "New Conf": st.column_config.TextColumn("New Conf", width="small"),
+                    "Used Conf": st.column_config.TextColumn("Used Conf", width="small"),
+                    "Stale": st.column_config.CheckboxColumn("Stale", width="small"),
+                    "InCollection": None,
+                    "Last Scraped": st.column_config.DatetimeColumn("Last Scraped", format="DD/MM/YYYY HH:mm")
+                },
+                disabled=[c for c in df_display.columns if c != "Select"] # Only allow editing "Select"
+            )
+            
+            # Show delete button if items selected
+            selected_rows = edited_df[edited_df.Select]
+            if not selected_rows.empty:
+                st.error(f"🗑️ {len(selected_rows)} items selected for deletion")
+                if st.button("Confirm Delete Selected"):
+                    success_count = 0
+                    for item_id in selected_rows["ID"]:
+                        try:
+                            delete_from_db(item_id)
+                            success_count += 1
+                        except:
+                            pass
+                    st.toast(f"Deleted {success_count} items", icon="🗑️")
+                    st.cache_data.clear()
+                    time.sleep(1)
+                    st.rerun()
+
+        else:
+            # Read-only View for Users
+            st.dataframe(
+                df_display,
+                width=None,
+                height=800,
+                hide_index=True,
+                column_config={
+                    "Image": st.column_config.ImageColumn("Img", width="small"),
+                    "ID": st.column_config.TextColumn("ID", width="small"),
+                    "Name": st.column_config.TextColumn("Name", width="medium"),
+                    "New Price": st.column_config.NumberColumn("New Price", format="%.2f ₪"),
+                    "Used Price": st.column_config.NumberColumn("Used Price", format="%.2f ₪"),
+                    "Profit": st.column_config.NumberColumn("Profit", format="%.2f ₪"),
+                    "Margin %": st.column_config.ProgressColumn("Margin", format="%.0f%%", min_value=-50, max_value=100),
+                    "Rating": st.column_config.TextColumn("Rating", width="small"),
+                    "New Conf": st.column_config.TextColumn("New Conf", width="small"),
+                    "Used Conf": st.column_config.TextColumn("Used Conf", width="small"),
+                    "Stale": st.column_config.CheckboxColumn("Stale", width="small"),
+                    "InCollection": None,
+                    "Last Scraped": None
+                }
+            )
     else:
         st.info("No sets in database. Use Set Analyzer to scan items.")
     
@@ -905,35 +956,115 @@ elif mode == "🔐 Ram's Collection":
         if not df_sets.empty:
             df_new = df_sets[df_sets["New Price"] > 0].sort_values("Profit", ascending=False)
             
-            st.dataframe(
-                df_new,
-                width="stretch",
-                column_order=["Stale", "Image", "ID", "Name", "New Price", "New Conf", "Used Price", "Profit", "Margin %", "Rating"],
-                hide_index=True,
-                column_config={
-                    "Image": st.column_config.ImageColumn("Img", width="small"),
-                    "New Price": st.column_config.NumberColumn("New Price", format="%.2f ₪"),
-                    "Used Price": st.column_config.NumberColumn("Used Price", format="%.2f ₪"),
-                    "Profit": st.column_config.NumberColumn("Profit", format="%.2f ₪"),
-                    "Margin %": st.column_config.ProgressColumn("Margin", format="%.0f%%", min_value=-50, max_value=100)
-                }
-            )
+            if st.session_state.user_role == "admin":
+                # Admin View (Select to Delete)
+                df_new["Select"] = False
+                cols = ["Select"] + [c for c in df_new.columns if c != "Select"]
+                df_new = df_new[cols]
+
+                edited_new = st.data_editor(
+                    df_new,
+                    width=None,
+                    column_order=["Select", "Stale", "Image", "ID", "Name", "New Price", "New Conf", "Used Price", "Profit", "Margin %", "Rating"],
+                    hide_index=True,
+                    column_config={
+                        "Select": st.column_config.CheckboxColumn("🗑️", width="small", help="Select to delete from collection"),
+                        "Image": st.column_config.ImageColumn("Img", width="small"),
+                        "New Price": st.column_config.NumberColumn("New Price", format="%.2f ₪"),
+                        "Used Price": st.column_config.NumberColumn("Used Price", format="%.2f ₪"),
+                        "Profit": st.column_config.NumberColumn("Profit", format="%.2f ₪"),
+                        "Margin %": st.column_config.ProgressColumn("Margin", format="%.0f%%", min_value=-50, max_value=100)
+                    },
+                    disabled=[c for c in df_new.columns if c != "Select"],
+                    key="editor_ram_tab1"
+                )
+                
+                # Delete Action
+                selected_tab1 = edited_new[edited_new.Select]
+                if not selected_tab1.empty:
+                    st.error(f"🗑️ {len(selected_tab1)} items selected")
+                    if st.button("Delete Selected", key="btn_del_tab1"):
+                        count = 0
+                        for item_id in selected_tab1["ID"]:
+                            try:
+                                delete_from_db(item_id)
+                                count += 1
+                            except: pass
+                        st.toast(f"Deleted {count} items", icon="🗑️")
+                        st.cache_data.clear()
+                        time.sleep(1)
+                        st.rerun()
+            else:
+                # User View
+                st.dataframe(
+                    df_new,
+                    width=None,
+                    column_order=["Stale", "Image", "ID", "Name", "New Price", "New Conf", "Used Price", "Profit", "Margin %", "Rating"],
+                    hide_index=True,
+                    column_config={
+                        "Image": st.column_config.ImageColumn("Img", width="small"),
+                        "New Price": st.column_config.NumberColumn("New Price", format="%.2f ₪"),
+                        "Used Price": st.column_config.NumberColumn("Used Price", format="%.2f ₪"),
+                        "Profit": st.column_config.NumberColumn("Profit", format="%.2f ₪"),
+                        "Margin %": st.column_config.ProgressColumn("Margin", format="%.0f%%", min_value=-50, max_value=100)
+                    }
+                )
 
     with tab2:
         st.caption("Undervalued Used Sets (High Minifig Value)")
         if not df_sets.empty:
             df_used = df_sets[df_sets["Used Price"] > 0].sort_values("Figs %", ascending=False)
-            st.dataframe(
-                df_used,
-                width="stretch",
-                column_order=["Stale", "Image", "ID", "Part-Out Alert", "Used Price", "Used Conf", "Total Figs Value", "Figs %"],
-                hide_index=True,
-                column_config={
-                    "Image": st.column_config.ImageColumn("Img", width="small"),
-                    "Part-Out Alert": st.column_config.TextColumn("Alert"),
-                    "Figs %": st.column_config.ProgressColumn("Figs %", format="%.0f%%", min_value=0, max_value=150)
-                }
-            )
+            if st.session_state.user_role == "admin":
+                # Admin View
+                df_used["Select"] = False
+                cols = ["Select"] + [c for c in df_used.columns if c != "Select"]
+                df_used = df_used[cols]
+
+                edited_used = st.data_editor(
+                    df_used,
+                    width=None,
+                    column_order=["Select", "Stale", "Image", "ID", "Part-Out Alert", "Used Price", "Used Conf", "Total Figs Value", "Figs %"],
+                    hide_index=True,
+                    column_config={
+                        "Select": st.column_config.CheckboxColumn("🗑️", width="small", help="Select to delete from collection"),
+                        "Image": st.column_config.ImageColumn("Img", width="small"),
+                        "Part-Out Alert": st.column_config.TextColumn("Alert"),
+                        "Used Price": st.column_config.NumberColumn("Used Price", format="%.2f ₪"),
+                         "Total Figs Value": st.column_config.NumberColumn("Total Figs Value", format="%.2f ₪"),
+                        "Figs %": st.column_config.ProgressColumn("Figs Value %", format="%.0f%%", min_value=0, max_value=200)
+                    },
+                    disabled=[c for c in df_used.columns if c != "Select"],
+                    key="editor_ram_tab2"
+                )
+                
+                # Delete Action
+                selected_tab2 = edited_used[edited_used.Select]
+                if not selected_tab2.empty:
+                    st.error(f"🗑️ {len(selected_tab2)} items selected")
+                    if st.button("Delete Selected", key="btn_del_tab2"):
+                        count = 0
+                        for item_id in selected_tab2["ID"]:
+                            try:
+                                delete_from_db(item_id)
+                                count += 1
+                            except: pass
+                        st.toast(f"Deleted {count} items", icon="🗑️")
+                        st.cache_data.clear()
+                        time.sleep(1)
+                        st.rerun()
+            else:
+                 # User View
+                st.dataframe(
+                    df_used,
+                    width=None,
+                    column_order=["Stale", "Image", "ID", "Part-Out Alert", "Used Price", "Used Conf", "Total Figs Value", "Figs %"],
+                    hide_index=True,
+                    column_config={
+                        "Image": st.column_config.ImageColumn("Img", width="small"),
+                        "Part-Out Alert": st.column_config.TextColumn("Alert"),
+                        "Figs %": st.column_config.ProgressColumn("Figs %", format="%.0f%%", min_value=0, max_value=150)
+                    }
+                )
 
     with tab3:
         st.dataframe(df_sets, width="stretch", hide_index=True, column_config={"Image": st.column_config.ImageColumn()})
