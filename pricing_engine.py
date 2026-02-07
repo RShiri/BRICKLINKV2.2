@@ -1,5 +1,6 @@
 import statistics
 import re
+import logging
 from datetime import datetime
 from typing import Dict, List, Any
 
@@ -111,6 +112,8 @@ class PriceAnalyzer:
         # Layer 1: Clean Data
         sold_data = [x for x in sold_raw if self._is_strictly_complete(x)]
         stock_data = [x for x in stock_raw if self._is_strictly_complete(x)]
+        
+        original_count = len(sold_data) + len(stock_data)
 
         # Layer 2: Minifig Floor
         if condition == "used" and minifig_val > 0:
@@ -118,7 +121,7 @@ class PriceAnalyzer:
             sold_data = [x for x in sold_data if x['price'] >= min_allowed]
             stock_data = [x for x in stock_data if x['price'] >= min_allowed]
 
-        # Calculate Price Floor (Median Based)
+        # Calculate Price Floor (Median Based - 20% rule)
         all_prices = [x['price'] for x in sold_data] + [x['price'] for x in stock_data]
         price_floor = 0
         if all_prices:
@@ -127,7 +130,8 @@ class PriceAnalyzer:
             if self.meta.get("year_released") == 2025:
                 price_floor = 1
             else:
-                price_floor = global_median * 0.60 
+                # Dynamic 20% floor (filters out "Box Only" listings)
+                price_floor = global_median * 0.20 
         
         sold_data = [x for x in sold_data if x['price'] >= price_floor]
         stock_data = [x for x in stock_data if x['price'] >= price_floor]
@@ -152,6 +156,14 @@ class PriceAnalyzer:
             # Fix: Low confidence relies on Stock Anchor to avoid outliers
             market_price = stock_anchor
             confidence = "LOW"
+        
+        # Confidence downgrade if >30% of data was filtered
+        final_count = len(sold_res["clean_items"]) + len(stock_res["clean_items"])
+        if original_count > 0:
+            filtered_pct = (original_count - final_count) / original_count
+            if filtered_pct > 0.30 and confidence == "HIGH":
+                confidence = "MEDIUM"
+                logging.info(f"⚠️ Confidence downgraded: {filtered_pct*100:.1f}% of data filtered")
 
         if market_price == 0 and sold_price > 0:
             market_price = sold_price

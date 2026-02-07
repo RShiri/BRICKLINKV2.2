@@ -74,13 +74,38 @@ class Database:
                     PRIMARY KEY (item_id, collection_name)
                 );
             ''')
+            
+            # Table for Price History
+            self.cursor.execute('''
+                CREATE TABLE IF NOT EXISTS price_history (
+                    id SERIAL PRIMARY KEY,
+                    item_id TEXT NOT NULL,
+                    price_new REAL,
+                    price_used REAL,
+                    confidence_new TEXT,
+                    confidence_used TEXT,
+                    scraped_at TIMESTAMPTZ NOT NULL,
+                    FOREIGN KEY (item_id) REFERENCES items(item_id) ON DELETE CASCADE
+                );
+            ''')
+            
+            # Create indexes for price_history
+            self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_price_history_item_id ON price_history(item_id);')
+            self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_price_history_scraped_at ON price_history(scraped_at);')
+            
+            # Add cached columns to items table (if not exists)
+            self.cursor.execute('ALTER TABLE items ADD COLUMN IF NOT EXISTS cached_rating TEXT;')
+            self.cursor.execute('ALTER TABLE items ADD COLUMN IF NOT EXISTS cached_profit REAL;')
+            self.cursor.execute('ALTER TABLE items ADD COLUMN IF NOT EXISTS cached_margin REAL;')
+            self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_items_cached_rating ON items(cached_rating);')
+            
             self.conn.commit()
         except Exception as e:
             self.conn.rollback()
             logging.error(f"Table Init Failed: {e}")
 
     def save_item(self, item_id, data):
-        """Saves scraped item data (Upsert)."""
+        """Saves scraped item data (Upsert) and records price history."""
         if self._is_empty_scrape(data):
             # Check if exists to avoid overwriting with bad data
             if self.get_item(item_id):
@@ -90,16 +115,44 @@ class Database:
         now = datetime.now().isoformat()
         json_str = json.dumps(data)
         
+        # Calculate cached values for fast queries
         try:
+            from pricing_engine import PriceAnalyzer
+            analysis = PriceAnalyzer(data).analyze()
+            rating = analysis.get("deep_dive", {}).get("sniper", {}).get("rating", "N/A")
+            profit = analysis.get("deep_dive", {}).get("sniper", {}).get("profit_abs", 0)
+            margin = analysis.get("deep_dive", {}).get("sniper", {}).get("margin_pct", 0)
+            price_new = analysis.get("new", {}).get("market_price", 0)
+            price_used = analysis.get("used", {}).get("market_price", 0)
+            conf_new = analysis.get("new", {}).get("confidence", "N/A")
+            conf_used = analysis.get("used", {}).get("confidence", "N/A")
+        except:
+            rating, profit, margin = "N/A", 0, 0
+            price_new, price_used = 0, 0
+            conf_new, conf_used = "N/A", "N/A"
+        
+        try:
+            # Save/update main item
             query = '''
-                INSERT INTO items (item_id, json_data, updated_at)
-                VALUES (%s, %s, %s)
+                INSERT INTO items (item_id, json_data, updated_at, cached_rating, cached_profit, cached_margin)
+                VALUES (%s, %s, %s, %s, %s, %s)
                 ON CONFLICT (item_id) 
                 DO UPDATE SET 
                     json_data = EXCLUDED.json_data,
-                    updated_at = EXCLUDED.updated_at;
+                    updated_at = EXCLUDED.updated_at,
+                    cached_rating = EXCLUDED.cached_rating,
+                    cached_profit = EXCLUDED.cached_profit,
+                    cached_margin = EXCLUDED.cached_margin;
             '''
-            self.cursor.execute(query, (item_id, json_str, now))
+            self.cursor.execute(query, (item_id, json_str, now, rating, profit, margin))
+            
+            # Record price history
+            history_query = '''
+                INSERT INTO price_history (item_id, price_new, price_used, confidence_new, confidence_used, scraped_at)
+                VALUES (%s, %s, %s, %s, %s, %s);
+            '''
+            self.cursor.execute(history_query, (item_id, price_new, price_used, conf_new, conf_used, now))
+            
             self.conn.commit()
         except Exception as e:
             self.conn.rollback()
@@ -219,6 +272,43 @@ class Database:
         except Exception as e:
             logging.error(f"Get Items By Prefix Failed: {e}")
             return []
+    
+    def get_price_history(self, item_id, days=30):
+        """Retrieves price history for an item over the last N days."""
+        try:
+            limit_date = (datetime.now() - timedelta(days=days)).isoformat()
+            self.cursor.execute('''
+                SELECT price_new, price_used, confidence_new, confidence_used, scraped_at
+                FROM price_history
+                WHERE item_id = %s AND scraped_at > %s
+                ORDER BY scraped_at DESC
+            ''', (item_id, limit_date))
+            return self.cursor.fetchall()
+        except:
+            return []
+    
+    def get_price_trend(self, item_id):
+        """Calculates price trend (% change) over last 30 days."""
+        try:
+            history = self.get_price_history(item_id, days=30)
+            if len(history) < 2:
+                return None
+            
+            latest = history[0]
+            oldest = history[-1]
+            
+            trend = {}
+            if latest[0] and oldest[0]:  # price_new
+                change = ((latest[0] - oldest[0]) / oldest[0]) * 100
+                trend['new_change_pct'] = round(change, 1)
+            
+            if latest[1] and oldest[1]:  # price_used
+                change = ((latest[1] - oldest[1]) / oldest[1]) * 100
+                trend['used_change_pct'] = round(change, 1)
+            
+            return trend
+        except:
+            return None
 
     def close(self):
         """Closes the connection."""

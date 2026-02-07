@@ -755,6 +755,56 @@ if mode == "📊 Set Analyzer Database":
                 st.cache_data.clear()
                 st.rerun()
 
+    # 🎯 SNIPER WAR ROOM - Hot Deals Dashboard
+    st.divider()
+    st.markdown("## 🎯 Sniper War Room")
+    st.caption("⚡ Best investment opportunities updated in the last 24 hours")
+    
+    try:
+        db = Database()
+        cutoff_time = (datetime.now() - timedelta(hours=24)).isoformat()
+        
+        # FAST query using cached columns (no JSON parsing needed)
+        db.cursor.execute("""
+            SELECT item_id, cached_rating, cached_profit, cached_margin, updated_at
+            FROM items 
+            WHERE updated_at > %s 
+              AND cached_rating IN ('GREAT INVEST', 'EXCELLENT')
+              AND cached_profit > 0
+            ORDER BY cached_profit DESC
+            LIMIT 50
+        """, (cutoff_time,))
+        
+        war_room_items = []
+        for row in db.cursor.fetchall():
+            war_room_items.append({
+                "🎯 ID": row[0],
+                "💰 Profit": f"{row[2]:.2f} ₪",
+                "📈 Margin": f"{row[3]:.1f}%",
+                "⭐ Rating": row[1],
+                "🕐 Scraped": row[4].strftime("%H:%M"),
+                "🛒 Buy Link": f"https://www.bricklink.com/v2/catalog/catalogitem.page?S={row[0]}#T=S&O={{\"iconly\":0}}"
+            })
+        
+        if war_room_items:
+            df_war = pd.DataFrame(war_room_items)
+            
+            # Display count and total profit
+            total_profit = sum([float(item["💰 Profit"].replace(" ₪", "")) for item in war_room_items])
+            col1, col2 = st.columns(2)
+            col1.metric("🔥 Hot Deals Found", len(war_room_items))
+            col2.metric("💎 Total Profit Potential", f"{total_profit:,.0f} ₪")
+            
+            st.dataframe(df_war, column_config={
+                "🛒 Buy Link": st.column_config.LinkColumn("🛒 Buy Now", width="small")
+            }, hide_index=True, use_container_width=True)
+        else:
+            st.info("🔍 No hot deals in the last 24 hours. Check back later or run Set Analyzer to find new opportunities!")
+        
+        db.close()
+    except Exception as e:
+        st.warning(f"⚠️ War Room temporarily unavailable: {e}")
+
 
 elif mode == "🔐 Ram's Collection":
     st.title("🔐 Ram's Collection")
