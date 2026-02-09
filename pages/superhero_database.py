@@ -13,17 +13,21 @@ st.markdown("**Marvel & DC Universe Collection (2005+)**")
 db = Database()
 
 # Load all superhero minifigures
-@st.cache_data(ttl=60)
-def load_superhero_data(search_filter=None):
+@st.cache_data(ttl=60, show_spinner=False)
+def load_superhero_data(search_filter=None, _progress_callback=None):
     """Loads all superhero minifigures (sh prefix) from database.
     
     Args:
         search_filter: Optional search term to filter items before expensive processing
+        _progress_callback: Optional callback function for progress updates (not cached)
     """
     raw_items = db.get_items_by_prefix("sh")
+    total_items = len(raw_items)
     
     display_data = []
-    for data in raw_items:
+    processed_count = 0
+    
+    for idx, data in enumerate(raw_items):
         if "error" in data:
             continue
         
@@ -62,6 +66,13 @@ def load_superhero_data(search_filter=None):
                 "is_exclusive": is_exclusive,
                 "is_big_fig": is_big_fig
             })
+            
+            processed_count += 1
+            
+            # Update progress every 10 items
+            if _progress_callback and processed_count % 10 == 0:
+                _progress_callback(idx + 1, total_items, item_name)
+                
         except Exception as e:
             continue
     
@@ -71,8 +82,25 @@ def load_superhero_data(search_filter=None):
 st.sidebar.header("🔍 Filters")
 search_term = st.sidebar.text_input("Search by Name or ID", placeholder="e.g. Spider-Man, sh001")
 
-with st.spinner("Loading Superhero Database..."):
-    all_figures = load_superhero_data(search_filter=search_term if search_term else None)
+# Load data with progress tracking
+progress_bar = st.progress(0)
+progress_text = st.empty()
+
+def update_progress(current, total, item_name):
+    """Update progress bar and text"""
+    progress = current / total
+    progress_bar.progress(progress)
+    progress_text.text(f"Loading superhero data... {current}/{total} items processed ({item_name[:30]}...)")
+
+progress_text.text("Loading superhero database...")
+all_figures = load_superhero_data(
+    search_filter=search_term if search_term else None,
+    _progress_callback=update_progress
+)
+
+# Clear progress indicators
+progress_bar.empty()
+progress_text.empty()
 
 # Convert to DataFrame
 df = pd.DataFrame(all_figures)

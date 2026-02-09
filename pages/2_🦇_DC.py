@@ -32,32 +32,39 @@ DC_KEYWORDS = [
 ]
 
 # Load all superhero minifigures
-@st.cache_data(ttl=10)  # Reduced TTL for debugging
-def load_dc_data():
-    """Loads all DC superhero minifigures from database."""
+@st.cache_data(ttl=10, show_spinner=False)  # Reduced TTL for debugging
+def load_dc_data(_progress_callback=None):
+    """Loads all DC superhero minifigures from database.
+    
+    Args:
+        _progress_callback: Optional callback function for progress updates (not cached)
+    """
     raw_items = db.get_items_by_prefix("sh")
+    total_items = len(raw_items)
     
     display_data = []
-    for data in raw_items:
+    processed_count = 0
+    
+    for idx, data in enumerate(raw_items):
         if "error" in data:
             continue
         
         try:
-            analyzer = PriceAnalyzer(data)
-            analysis = analyzer.analyze()
-            
             meta = data.get("meta", {})
-            year = meta.get("year_released")
-            year_int = int(year) if year and str(year).replace('.', '').isdigit() else 0
-            year_str = str(year_int) if year_int > 0 else "Unknown"
-            
             name = meta.get("item_name", "Unknown")
             name_lower = name.lower()
             
-            # Filter: Only DC characters
+            # Filter: Only DC characters (BEFORE expensive PriceAnalyzer)
             is_dc = any(keyword in name_lower for keyword in DC_KEYWORDS)
             if not is_dc:
                 continue
+            
+            analyzer = PriceAnalyzer(data)
+            analysis = analyzer.analyze()
+            
+            year = meta.get("year_released")
+            year_int = int(year) if year and str(year).replace('.', '').isdigit() else 0
+            year_str = str(year_int) if year_int > 0 else "Unknown"
             
             # Categorization logic - improved Big Figures detection
             is_exclusive = "exclusive" in name_lower or "sdcc" in name_lower or "nycc" in name_lower
@@ -96,13 +103,34 @@ def load_dc_data():
                 "is_exclusive": is_exclusive,
                 "is_big_fig": is_big_fig
             })
+            
+            processed_count += 1
+            
+            # Update progress every 10 items
+            if _progress_callback and processed_count % 10 == 0:
+                _progress_callback(idx + 1, total_items, name)
+                
         except Exception as e:
             continue
     
     return display_data
 
-with st.spinner("Loading DC Database..."):
-    all_figures = load_dc_data()
+# Load data with progress tracking
+progress_bar = st.progress(0)
+progress_text = st.empty()
+
+def update_progress(current, total, item_name):
+    """Update progress bar and text"""
+    progress = current / total
+    progress_bar.progress(progress)
+    progress_text.text(f"Loading DC data... {current}/{total} items processed ({item_name[:30]}...)")
+
+progress_text.text("Loading DC database...")
+all_figures = load_dc_data(_progress_callback=update_progress)
+
+# Clear progress indicators
+progress_bar.empty()
+progress_text.empty()
 
 # Convert to DataFrame
 df = pd.DataFrame(all_figures)
