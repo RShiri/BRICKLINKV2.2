@@ -1422,10 +1422,16 @@ elif mode == "🔎 Set Analyzer":
             
             raw_ids = ids
             
-            # BATCH MODE - PARALLEL PROCESSING
+            # BATCH MODE - SMART PROCESSING (Sequential for small, Parallel for large)
             if len(raw_ids) > 1:
                 with st.chat_message("assistant"):
-                    st.write(f"🚀 Batch Processing {len(raw_ids)} items in parallel... (Force: {force_mode})")
+                    # Use sequential for small batches (≤3 items), parallel for larger
+                    use_parallel = len(raw_ids) > 3
+                    
+                    if use_parallel:
+                        st.write(f"🚀 Batch Processing {len(raw_ids)} items in parallel... (Force: {force_mode})")
+                    else:
+                        st.write(f"⚡ Processing {len(raw_ids)} items sequentially... (Force: {force_mode})")
                     
                     # Helper function for thread-safe processing
                     def process_single_item(item_id):
@@ -1435,7 +1441,7 @@ elif mode == "🔎 Set Analyzer":
                         except Exception as e:
                             return {"error": str(e), "item_id": item_id, "success": False}
                     
-                    # Parallel processing setup
+                    # Processing setup
                     total_items = len(raw_ids)
                     start_time = time.time()
                     prog_bar = st.progress(0)
@@ -1444,52 +1450,80 @@ elif mode == "🔎 Set Analyzer":
                     summaries = []
                     expanders_data = []
                     
-                    with ThreadPoolExecutor(max_workers=5) as executor:
-                        # Submit all tasks
-                        futures = {
-                            executor.submit(process_single_item, item_id): item_id
-                            for item_id in raw_ids
-                        }
-                        
-                        # Process results as they complete
-                        for i, future in enumerate(as_completed(futures)):
-                            item_id = futures[future]
+                    if use_parallel:
+                        # PARALLEL PROCESSING (for batches > 3 items)
+                        with ThreadPoolExecutor(max_workers=5) as executor:
+                            # Submit all tasks
+                            futures = {
+                                executor.submit(process_single_item, item_id): item_id
+                                for item_id in raw_ids
+                            }
                             
-                            # --- Time Estimation Logic ---
-                            completed = i + 1
-                            elapsed_time = time.time() - start_time
-                            avg_time_per_item = elapsed_time / completed
-                            remaining_items = total_items - completed
-                            est_seconds_left = int(avg_time_per_item * remaining_items)
+                            # Process results as they complete
+                            completed = 0
+                            for future in as_completed(futures):
+                                completed += 1
+                                item_id = futures[future]
+                                
+                                # Calculate ETA
+                                elapsed = time.time() - start_time
+                                avg_time = elapsed / completed
+                                remaining_items = total_items - completed
+                                est_time_left = avg_time * remaining_items
+                                
+                                # Update progress
+                                prog_bar.progress(completed / total_items)
+                                status_txt.text(
+                                    f"⏳ {completed}/{total_items} completed | "
+                                    f"Elapsed: {elapsed:.1f}s | "
+                                    f"ETA: {est_time_left:.1f}s | "
+                                    f"Speed: {avg_time:.1f}s/item"
+                                )
+                                
+                                # Get result
+                                try:
+                                    result = future.result()
+                                    
+                                    if result.get("success"):
+                                        summary = result["summary"]
+                                        summaries.append(summary)
+                                        expanders_data.append({
+                                            "id": result["item_id"],
+                                            "name": summary["Name"],
+                                            "report": result["report"],
+                                            "images": result["images"],
+                                            "captions": result["captions"],
+                                            "main_img": result["main_img"]
+                                        })
+                                    else:
+                                        st.error(f"Error {item_id}: {result.get('error', 'Unknown error')}")
+                                
+                                except Exception as e:
+                                    st.error(f"Error {item_id}: {str(e)}")
+                    
+                    else:
+                        # SEQUENTIAL PROCESSING (for batches ≤ 3 items)
+                        for idx, item_id in enumerate(raw_ids, 1):
+                            # Update progress
+                            prog_bar.progress(idx / total_items)
+                            status_txt.text(f"⏳ Processing {idx}/{total_items}: {item_id}...")
                             
-                            # Format time nicely (e.g., 00:12)
-                            mins, secs = divmod(est_seconds_left, 60)
-                            time_str = f"{mins:02d}:{secs:02d}"
+                            # Process item
+                            result = process_single_item(item_id)
                             
-                            # Update Status with Progress & Time
-                            status_txt.markdown(f"""
-                                **Processing:** `{item_id}` ({completed}/{total_items})  
-                                ⏳ **Time Remaining:** {time_str}  
-                                🚀 **Speed:** {avg_time_per_item:.1f}s/item
-                            """)
-                            
-                            prog_bar.progress(completed / total_items)
-                            # -----------------------------
-                            
-                            # Get result
-                            res = future.result()
-                            if res.get("success"):
-                                summaries.append(res["summary"])
+                            if result.get("success"):
+                                summary = result["summary"]
+                                summaries.append(summary)
                                 expanders_data.append({
-                                    "id": res["item_id"],
-                                    "name": res["summary"]["Name"],
-                                    "report": res["report"],
-                                    "main_img": res["main_img"],
-                                    "images": res["images"],
-                                    "captions": res["captions"]
+                                    "id": result["item_id"],
+                                    "name": summary["Name"],
+                                    "report": result["report"],
+                                    "images": result["images"],
+                                    "captions": result["captions"],
+                                    "main_img": result["main_img"]
                                 })
                             else:
-                                st.error(f"Error {item_id}: {res.get('error')}")
+                                st.error(f"Error {item_id}: {result.get('error', 'Unknown error')}")
                     
                     prog_bar.empty()
                     status_txt.empty()
