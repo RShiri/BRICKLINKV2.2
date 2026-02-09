@@ -120,15 +120,31 @@ class Database:
         try:
             # Reuse cached connection instead of creating new one
             self.conn = get_db_connection()
-            self.cursor = self.conn.cursor()
             
-            # Only initialize tables once (on first connection creation)
-            # Tables are already created by the cached connection
+            # Check if connection is still alive, reconnect if needed
+            if self.conn.closed:
+                logging.warning("⚠️ Cached connection was closed, clearing cache and reconnecting...")
+                st.cache_resource.clear()
+                self.conn = get_db_connection()
+            
+            self.cursor = self.conn.cursor()
             
         except Exception as e:
             logging.error(f"Database Connection Failed: {e}")
             st.error(f"Database Connection Failed: {e}")
             raise e
+
+    def close(self):
+        """
+        Close the cursor but NOT the connection (it's shared across the session).
+        The connection will be closed when the Streamlit session ends.
+        """
+        try:
+            if hasattr(self, 'cursor') and self.cursor:
+                self.cursor.close()
+            # DO NOT close self.conn - it's shared via @st.cache_resource
+        except Exception as e:
+            logging.error(f"Error closing cursor: {e}")
 
     def _init_tables(self):
         """Creates the necessary tables if they don't exist (Postgres syntax)."""
