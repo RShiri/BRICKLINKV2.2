@@ -349,10 +349,8 @@ def process_analysis(item_id, deep_scan_enabled, force_scrape=False, progress_ca
     if progress_callback: progress_callback(f"🔎 Analyzing {item_id}...")
     
     db = Database()
-    
-    try:
-        item_data = db.get_item(item_id)
-        needs_scrape = False
+    item_data = db.get_item(item_id)
+    needs_scrape = False
     
     # 1. Validation Logic
     if force_scrape:
@@ -433,101 +431,108 @@ def process_analysis(item_id, deep_scan_enabled, force_scrape=False, progress_ca
                     fa = PriceAnalyzer(fig_data).analyze()
                     return fa['new']['market_price'], fa['used']['market_price']
                 except:
-                    needs_scrape = True
+                    return 0.0, 0.0
+            
+            for idx, fig in enumerate(inv):
+                # Progress Update
+                if progress_callback: 
+                    progress_callback(f"👥 Analyzing Minifigures... ({idx+1}/{num_figs}): {fig['name'][:20]}...")
 
-        scraper = get_scraper()
-        
-        # 2. Scrape if needed
-        if needs_scrape:
-            try:
-                if progress_callback: progress_callback(f"⏳ Scraping {item_id}...")
+                # Get fig data
+                fd = db.get_item(fig['id'])
                 
-                # Determine type
-                itype = 'M' if any(c.isalpha() for c in item_id) else 'S'
-                
-                scrape_result = scraper.scrape(item_id, item_type=itype, force=True)
-                if scrape_result and "error" in scrape_result:
-                    return {"error": scrape_result["error"]}
-                
-                if scrape_result:
-                    item_data = db.get_item(item_id) # Reload cleaned
-            except Exception as e:
-                return {"error": f"Scrape failed: {e}"}
+                # Check for bad data or stale data
+                fig_needs_scrape = False
+                if not fd:
+                    fig_needs_scrape = True
+                else:
+                    # 1. Freshness Check (30 days)
+                    last_updated = fd.get("meta", {}).get("timestamp") or fd.get("updated_at")
+                    if last_updated:
+                        try:
+                            dt = datetime.fromisoformat(last_updated)
+                            if datetime.now() - dt > timedelta(days=30):
+                                fig_needs_scrape = True
+                        except: fig_needs_scrape = True
 
-        if not item_data:
-            return {"error": f"No data found for {item_id}"}
-
-        # 3. Minifigure Logic
-        minifig_new = 0.0
-        minifig_used = 0.0
-        mf_details = []
-        mf_images = []
-        mf_captions = []
-        
-        try:
-            inv_list = db.get_inventory_list(item_id)
-            if inv_list and 'minifigs' in inv_list:
-                for fig in inv_list['minifigs']:
+                    # 2. Deep Scan (Missing content)
+                    if not fig_needs_scrape and deep_scan_enabled:
+                        try:
+                            has_new = fd.get('new', {}).get('sold') or fd.get('new', {}).get('stock')
+                            has_used = fd.get('used', {}).get('sold') or fd.get('used', {}).get('stock')
+                            if not has_new and not has_used:
+                                fig_needs_scrape = True
+                        except: fig_needs_scrape = True
+                
+                # Scrape if needed
+                if fig_needs_scrape:
                     try:
-                        fig_data = db.get_item(fig['id'])
-                        if fig_data:
-                            analyzer = PriceAnalyzer(fig_data)
-                            result = analyzer.analyze()
-                            p_new = result['new']['market_price']
-                            p_used = result['used']['market_price']
-                            qty = fig.get('quantity', 1)
-                            
-                            minifig_new += (p_new * qty)
-                            minifig_used += (p_used * qty)
-                            
-                            mf_details.append({
-                                "id": fig['id'],
-                                "name": fig['name'],
-                                "qty": qty,
-                                "new": p_new, 
-                                "used": p_used
-                            })
-                            
-                            img_url = get_img_url(fig['id'])
-                            mf_images.append(img_url)
-                            short = (fig['name'][:15] + '..') if len(fig['name']) > 15 else fig['name']
-                            mf_captions.append(f"{short}\n({p_new:.0f}₪)")
-                    except: pass
-        except: pass
-        
-        # 4. Final Report
-        analysis = PriceAnalyzer(item_data).analyze(minifig_value_new=minifig_new, minifig_value_used=minifig_used)
-        report_text = create_console_report(item_id, analysis, mf_details, minifig_new, minifig_used)
-        
-        # 5. Summary Data
-        sniper = analysis.get("deep_dive", {}).get("sniper", {})
-        summary = {
-            "ID": item_id,
-            "Name": analysis.get("meta", {}).get("item_name", "Unknown"),
-            "New Price": analysis.get("new", {}).get("market_price", 0),
-            "Used Price": analysis.get("used", {}).get("market_price", 0),
-            "Profit": sniper.get("profit_abs", 0),
-            "Rating": sniper.get("rating", "N/A"),
-            "Status": analysis.get("deep_dive", {}).get("lifecycle", {}).get("status", "N/A")
-        }
+                        msg = f"⬇️ Fetching data for {fig['name'][:15]}... ({idx+1}/{num_figs})"
+                        if progress_callback: progress_callback(msg)
+                        else: st.toast(msg, icon="⬇️")
+                        
+                        fresh_data = scraper.scrape(fig['id'], item_type='M')
+                        if fresh_data:
+                            db.save_item(fig['id'], fresh_data)
+                            fd = db.get_item(fig['id']) # Reload immediately
+                    except Exception as e:
+                        print(f"Failed to fix {fig['id']}: {e}")
 
-        # Save to Collection ONLY if item was scraped (not just read from cache)
-        if needs_scrape:
-            db.add_to_collection(item_id, "Ram's Collection")
-        
-        return {
-            "success": True,
-            "item_id": item_id,
-            "summary": summary,
-            "report": report_text,
-            "images": mf_images,
-            "captions": mf_captions,
-            "main_img": get_img_url(item_id)
-        }
+                # Calculate using CACHED analysis
+                if fd:
+                    try:
+                        # Use cached analysis to avoid redundant PriceAnalyzer calls
+                        fig_data_json = json.dumps(fd)
+                        p_new, p_used = get_cached_minifig_prices(fig['id'], fig_data_json)
+                        
+                        qty = fig.get('qty', fig.get('quantity', 1))
+                        minifig_new += (p_new * qty)
+                        minifig_used += (p_used * qty)
+                        
+                        mf_details.append({
+                            "id": fig['id'], 
+                            "name": fig['name'],
+                            "qty": qty,
+                            "new": p_new, 
+                            "used": p_used
+                        })
+                        
+                        img_url = get_img_url(fig['id'])
+                        mf_images.append(img_url)
+                        short = (fig['name'][:15] + '..') if len(fig['name']) > 15 else fig['name']
+                        mf_captions.append(f"{short}\n({p_new:.0f}₪)")
+                    except: pass
     
-    finally:
-        # ALWAYS close the database connection, even on errors
-        db.close()
+    # 4. Final Report
+    analysis = PriceAnalyzer(item_data).analyze(minifig_value_new=minifig_new, minifig_value_used=minifig_used)
+    report_text = create_console_report(item_id, analysis, mf_details, minifig_new, minifig_used)
+    
+    # 5. Summary Data
+    sniper = analysis.get("deep_dive", {}).get("sniper", {})
+    summary = {
+        "ID": item_id,
+        "Name": analysis.get("meta", {}).get("item_name", "Unknown"),
+        "New Price": analysis.get("new", {}).get("market_price", 0),
+        "Used Price": analysis.get("used", {}).get("market_price", 0),
+        "Profit": sniper.get("profit_abs", 0),
+        "Rating": sniper.get("rating", "N/A"),
+        "Status": analysis.get("deep_dive", {}).get("lifecycle", {}).get("status", "N/A")
+    }
+
+    # Save to Collection ONLY if item was scraped (not just read from cache)
+    if needs_scrape:
+        db.add_to_collection(item_id, "Ram's Collection")
+    db.close()
+    
+    return {
+        "success": True,
+        "item_id": item_id,
+        "summary": summary,
+        "report": report_text,
+        "images": mf_images,
+        "captions": mf_captions,
+        "main_img": get_img_url(item_id)
+    }
 
 # --- SMART CACHE INVALIDATION ---
 def get_latest_update_timestamp():
@@ -1447,7 +1452,7 @@ elif mode == "🔎 Set Analyzer":
                     
                     if use_parallel:
                         # PARALLEL PROCESSING (for batches > 3 items)
-                        # Using 2 workers to prevent pool exhaustion (each worker uses ~6 connections)
+                        # Using 2 workers to prevent pool exhaustion
                         with ThreadPoolExecutor(max_workers=2) as executor:
                             # Submit all tasks
                             futures = {
