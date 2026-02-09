@@ -72,7 +72,24 @@ def render_about_me_page():
     if st.button("← Back to Dashboard"):
         st.session_state.show_about_me = False
         st.rerun()
+    
+    # Display README first
+    st.title("📖 Project Documentation")
+    st.divider()
+    
+    try:
+        with open("README.md", "r", encoding="utf-8") as f:
+            readme_content = f.read()
+        st.markdown(readme_content, unsafe_allow_html=True)
+    except FileNotFoundError:
+        st.error("README.md not found")
+    
+    st.divider()
+    st.title("👨‍💻 About the Creator")
+    st.divider()
+    
     render_about_me_content()
+
 
 # --- ROLE SELECTION & AUTHENTICATION ---
 # Initialize session state
