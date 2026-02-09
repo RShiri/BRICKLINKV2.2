@@ -102,6 +102,9 @@ BrickLinkV2.2/
 ├── scraper.py                # BrickLink web scraping engine
 ├── pricing_engine.py         # Market analysis & pricing algorithms
 ├── backfill_cached_columns.py # Pre-computation script for cached columns
+├── scan_all_minifigs.py      # Universal theme scanner (15+ themes)
+├── scan_catalog.py           # BrickLink catalog tree crawler
+├── scan_superheroes.py       # Autonomous Marvel/DC minifig scanner
 ├── pages/
 │   ├── 1_🦸_Marvel.py        # Marvel superhero minifig database
 │   └── 2_🦇_DC.py            # DC superhero minifig database
@@ -194,6 +197,38 @@ Navigate to `http://localhost:8501` 🎉
 - Investment recommendations
 - Market lifecycle analysis
 - Real-time filtering and sorting
+
+### 🕷️ Autonomous Data Mining Agents
+The project includes standalone CLI scripts for mass-data collection:
+
+- **`scan_superheroes.py`**: Smart scraper that iterates through `sh0001`-`sh9999`, detects gaps, and builds a complete Marvel/DC database.
+- **`scan_catalog.py`**: A crawler that maps the entire BrickLink category tree to discover new themes automatically.
+- **`scan_all_minifigs.py`**: Universal scanner handling 15+ themes (Star Wars, Harry Potter, Ninjago) with smart gap detection.
+
+*Run them in the background to feed the dashboard with fresh market data.*
+
+**Usage Example:**
+```bash
+# Scan all superhero minifigs (sh0001-sh9999)
+python scan_superheroes.py
+
+# Discover new LEGO themes from BrickLink catalog
+python scan_catalog.py
+
+# Scan specific theme ranges
+python scan_all_minifigs.py
+```
+
+### 🔐 Role-Based Access Control
+- **User Mode**: Read-only access to market analysis and public databases.
+- **Admin Mode**: Password-protected area (`7399`) with write privileges:
+  - Delete items from database
+  - Manage specific portfolios (Ram's Collection / Udi's Collection)
+  - Access to raw data editor
+  - Force re-scrape capabilities
+
+### 📱 Mobile-First Design
+Custom CSS injection ensures the dashboard is fully responsive on smartphones, optimized for checking prices while hunting in physical stores. The interface adapts seamlessly to small screens with touch-friendly controls.
 
 ---
 
