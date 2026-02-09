@@ -459,8 +459,9 @@ def process_analysis(item_id, deep_scan_enabled, force_scrape=False, progress_ca
         "Status": analysis.get("deep_dive", {}).get("lifecycle", {}).get("status", "N/A")
     }
 
-    # Save to Collection
-    db.add_to_collection(item_id, "Ram's Collection")
+    # Save to Collection ONLY if item was scraped (not just read from cache)
+    if needs_scrape:
+        db.add_to_collection(item_id, "Ram's Collection")
     db.close()
     
     return {
