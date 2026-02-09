@@ -14,20 +14,24 @@ logging.basicConfig(
 )
 
 # ============================================================================
-# CONNECTION POOLING - Singleton pattern using Streamlit's cache_resource
+# CONNECTION POOLING - Thread-safe pool for multi-session support
 # ============================================================================
 @st.cache_resource
-def get_db_connection():
+def get_db_pool():
     """
-    Creates and caches a single PostgreSQL connection for the entire session.
-    This eliminates the overhead of creating 50+ connections per page load.
+    Creates and caches a ThreadedConnectionPool for the entire application.
+    This supports concurrent access from multiple devices/sessions (PC + phone).
     
     Returns:
-        psycopg2.connection: Persistent database connection
+        psycopg2.pool.ThreadedConnectionPool: Connection pool with 2-10 connections
     """
     try:
+        from psycopg2 import pool
+        
         db_config = st.secrets["supabase"]
-        conn = psycopg2.connect(
+        connection_pool = pool.ThreadedConnectionPool(
+            minconn=2,  # Minimum connections
+            maxconn=10,  # Maximum connections
             host=db_config["host"],
             port=db_config["port"],
             dbname=db_config["dbname"],
@@ -35,19 +39,23 @@ def get_db_connection():
             password=db_config["password"]
         )
         
-        # Initialize tables once when connection is first created
-        cursor = conn.cursor()
-        _init_tables_once(cursor, conn)
-        cursor.close()
+        # Initialize tables once using a connection from the pool
+        conn = connection_pool.getconn()
+        try:
+            cursor = conn.cursor()
+            _init_tables_once(cursor, conn)
+            cursor.close()
+        finally:
+            connection_pool.putconn(conn)
         
-        logging.info("✅ Database connection pool initialized")
-        return conn
+        logging.info("✅ Database connection pool initialized (2-10 connections)")
+        return connection_pool
     except Exception as e:
-        logging.error(f"❌ Database connection failed: {e}")
+        logging.error(f"❌ Database pool creation failed: {e}")
         raise e
 
 def _init_tables_once(cursor, conn):
-    """Creates the necessary tables if they don't exist (called once on connection creation)."""
+    """Creates the necessary tables if they don't exist (called once on pool creation)."""
     try:
         # Table for Items
         cursor.execute('''
@@ -112,20 +120,23 @@ class Database:
     Handles PostgreSQL (Supabase) database interactions.
     Manages item data, inventory lists, and collection tracking.
     
-    Now uses connection pooling via get_db_connection() for better performance.
+    Now uses ThreadedConnectionPool for multi-session support (PC + phone).
     """
 
     def __init__(self):
-        """Initializes the database connection using cached connection pool."""
+        """Gets a connection from the pool for this Database instance."""
         try:
-            # Reuse cached connection instead of creating new one
-            self.conn = get_db_connection()
+            # Get connection pool
+            self.pool = get_db_pool()
             
-            # Check if connection is still alive, reconnect if needed
+            # Get a connection from the pool
+            self.conn = self.pool.getconn()
+            
+            # Check if connection is valid
             if self.conn.closed:
-                logging.warning("⚠️ Cached connection was closed, clearing cache and reconnecting...")
-                st.cache_resource.clear()
-                self.conn = get_db_connection()
+                logging.warning("⚠️ Got closed connection from pool, getting new one...")
+                self.pool.putconn(self.conn)
+                self.conn = self.pool.getconn()
             
             self.cursor = self.conn.cursor()
             
@@ -136,15 +147,18 @@ class Database:
 
     def close(self):
         """
-        Close the cursor but NOT the connection (it's shared across the session).
-        The connection will be closed when the Streamlit session ends.
+        Closes the cursor and returns the connection to the pool.
+        The connection is NOT destroyed, just returned for reuse.
         """
         try:
             if hasattr(self, 'cursor') and self.cursor:
                 self.cursor.close()
-            # DO NOT close self.conn - it's shared via @st.cache_resource
+            
+            # Return connection to pool (not close it)
+            if hasattr(self, 'conn') and hasattr(self, 'pool'):
+                self.pool.putconn(self.conn)
         except Exception as e:
-            logging.error(f"Error closing cursor: {e}")
+            logging.error(f"Error closing database: {e}")
 
     def _init_tables(self):
         """Creates the necessary tables if they don't exist (Postgres syntax)."""
