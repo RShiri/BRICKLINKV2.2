@@ -72,24 +72,24 @@ def render_about_me_page():
     if st.button("← Back to Dashboard"):
         st.session_state.show_about_me = False
         st.rerun()
+    render_about_me_content()
+
+def render_readme_page():
+    """Display README.md content"""
+    if st.button("← Back to Dashboard"):
+        st.session_state.show_readme = False
+        st.rerun()
     
-    # Display README first
     st.title("📖 Project Documentation")
-    st.divider()
     
     try:
         with open("README.md", "r", encoding="utf-8") as f:
             readme_content = f.read()
         st.markdown(readme_content, unsafe_allow_html=True)
     except FileNotFoundError:
-        st.error("README.md not found")
-    
-    st.divider()
-    st.title("👨‍💻 About the Creator")
-    st.divider()
-    
-    render_about_me_content()
-
+        st.error("README.md file not found!")
+    except Exception as e:
+        st.error(f"Error loading README: {e}")
 
 # --- ROLE SELECTION & AUTHENTICATION ---
 # Initialize session state
@@ -99,6 +99,8 @@ if "admin_authenticated" not in st.session_state:
     st.session_state.admin_authenticated = False
 if "show_about_me" not in st.session_state:
     st.session_state.show_about_me = False
+if "show_readme" not in st.session_state:
+    st.session_state.show_readme = False
 
 # Role selection page
 if st.session_state.user_role is None:
@@ -665,6 +667,15 @@ if st.sidebar.button("👨‍💻 About Me"):
 
 if st.session_state.show_about_me:
     render_about_me_page()
+    st.stop()
+
+# README Documentation Section
+if st.sidebar.button("📖 README"):
+    st.session_state.show_readme = True
+    st.rerun()
+
+if st.session_state.show_readme:
+    render_readme_page()
     st.stop()
 
 st.sidebar.divider()
