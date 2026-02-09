@@ -361,6 +361,17 @@ def process_analysis(item_id, deep_scan_enabled, force_scrape=False, progress_ca
             num_figs = len(inv)
             if progress_callback: progress_callback(f"👥 Analyzing {num_figs} Minifigures...")
             
+            # Cache for minifigure analysis to avoid redundant calculations
+            @st.cache_data(ttl=1800, show_spinner=False)  # Cache for 30 minutes
+            def get_cached_minifig_prices(fig_id, fig_data_json):
+                """Cached minifigure price analysis to avoid redundant PriceAnalyzer calls"""
+                try:
+                    fig_data = json.loads(fig_data_json)
+                    fa = PriceAnalyzer(fig_data).analyze()
+                    return fa['new']['market_price'], fa['used']['market_price']
+                except:
+                    return 0.0, 0.0
+            
             for idx, fig in enumerate(inv):
                 # Progress Update
                 if progress_callback: 
@@ -406,12 +417,12 @@ def process_analysis(item_id, deep_scan_enabled, force_scrape=False, progress_ca
                     except Exception as e:
                         print(f"Failed to fix {fig['id']}: {e}")
 
-                # Calculate
+                # Calculate using CACHED analysis
                 if fd:
                     try:
-                        fa = PriceAnalyzer(fd).analyze()
-                        p_new = fa['new']['market_price']
-                        p_used = fa['used']['market_price']
+                        # Use cached analysis to avoid redundant PriceAnalyzer calls
+                        fig_data_json = json.dumps(fd)
+                        p_new, p_used = get_cached_minifig_prices(fig['id'], fig_data_json)
                         
                         qty = fig.get('qty', fig.get('quantity', 1))
                         minifig_new += (p_new * qty)
@@ -692,7 +703,7 @@ if mode == "📊 Set Analyzer Database":
             
             edited_df = st.data_editor(
                 df_display,
-                width=None, # Stretch
+                use_container_width=True,
                 height=800,
                 hide_index=True,
                 column_config={
@@ -964,7 +975,7 @@ elif mode == "🔐 Ram's Collection":
 
                 edited_new = st.data_editor(
                     df_new,
-                    width=None,
+                    use_container_width=True,
                     column_order=["Select", "Stale", "Image", "ID", "Name", "New Price", "New Conf", "Used Price", "Profit", "Margin %", "Rating"],
                     hide_index=True,
                     column_config={
@@ -1022,7 +1033,7 @@ elif mode == "🔐 Ram's Collection":
 
                 edited_used = st.data_editor(
                     df_used,
-                    width=None,
+                    use_container_width=True,
                     column_order=["Select", "Stale", "Image", "ID", "Part-Out Alert", "Used Price", "Used Conf", "Total Figs Value", "Figs %"],
                     hide_index=True,
                     column_config={
