@@ -1452,7 +1452,8 @@ elif mode == "🔎 Set Analyzer":
                     
                     if use_parallel:
                         # PARALLEL PROCESSING (for batches > 3 items)
-                        with ThreadPoolExecutor(max_workers=5) as executor:
+                        # Using 3 workers to prevent pool exhaustion (each worker uses ~6 connections)
+                        with ThreadPoolExecutor(max_workers=3) as executor:
                             # Submit all tasks
                             futures = {
                                 executor.submit(process_single_item, item_id): item_id
