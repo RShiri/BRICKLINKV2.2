@@ -14,8 +14,12 @@ db = Database()
 
 # Load all superhero minifigures
 @st.cache_data(ttl=60)
-def load_superhero_data():
-    """Loads all superhero minifigures (sh prefix) from database."""
+def load_superhero_data(search_filter=None):
+    """Loads all superhero minifigures (sh prefix) from database.
+    
+    Args:
+        search_filter: Optional search term to filter items before expensive processing
+    """
     raw_items = db.get_items_by_prefix("sh")
     
     display_data = []
@@ -23,31 +27,38 @@ def load_superhero_data():
         if "error" in data:
             continue
         
+        # OPTIMIZATION: Filter BEFORE expensive PriceAnalyzer processing
+        meta = data.get("meta", {})
+        item_id = meta.get("item_id", "")
+        item_name = meta.get("item_name", "Unknown")
+        
+        if search_filter:
+            term = search_filter.lower()
+            if term not in item_name.lower() and term not in item_id.lower():
+                continue  # Skip items that don't match search
+        
         try:
             analyzer = PriceAnalyzer(data)
             analysis = analyzer.analyze()
             
-            meta = data.get("meta", {})
             year = meta.get("year_released")
             year_int = int(year) if year and str(year).replace('.', '').isdigit() else 0
             year_str = str(year_int) if year_int > 0 else "Unknown"
             
-            name = meta.get("item_name", "Unknown")
-            
             # Categorization logic
-            is_exclusive = "exclusive" in name.lower() or "sdcc" in name.lower() or "nycc" in name.lower()
-            is_big_fig = "giant" in name.lower() or "big fig" in name.lower() or "bigfig" in name.lower()
+            is_exclusive = "exclusive" in item_name.lower() or "sdcc" in item_name.lower() or "nycc" in item_name.lower()
+            is_big_fig = "giant" in item_name.lower() or "big fig" in item_name.lower() or "bigfig" in item_name.lower()
             
             display_data.append({
-                "id": meta.get("item_id"),
-                "name": name,
+                "id": item_id,
+                "name": item_name,
                 "year": year_str,
                 "year_int": year_int,
                 "used_price": analysis.get("used", {}).get("market_price", 0),
                 "new_price": analysis.get("new", {}).get("market_price", 0),
                 "used_conf": analysis.get("used", {}).get("confidence", "N/A"),
                 "new_conf": analysis.get("new", {}).get("confidence", "N/A"),
-                "img": f"https://img.bricklink.com/ItemImage/MN/0/{meta.get('item_id')}.png",
+                "img": f"https://img.bricklink.com/ItemImage/MN/0/{item_id}.png",
                 "is_exclusive": is_exclusive,
                 "is_big_fig": is_big_fig
             })
@@ -56,8 +67,12 @@ def load_superhero_data():
     
     return display_data
 
+# Sidebar Filters (moved before data loading for optimization)
+st.sidebar.header("🔍 Filters")
+search_term = st.sidebar.text_input("Search by Name or ID", placeholder="e.g. Spider-Man, sh001")
+
 with st.spinner("Loading Superhero Database..."):
-    all_figures = load_superhero_data()
+    all_figures = load_superhero_data(search_filter=search_term if search_term else None)
 
 # Convert to DataFrame
 df = pd.DataFrame(all_figures)
@@ -84,10 +99,6 @@ col4.metric("Big Figures", f"{len(df_big_figs):,}")
 
 st.divider()
 
-# Sidebar Filters
-st.sidebar.header("🔍 Filters")
-search_term = st.sidebar.text_input("Search by Name or ID", placeholder="e.g. Spider-Man, sh001")
-
 # Tabs for different categories
 tab_standard, tab_exclusive, tab_bigfig, tab_all = st.tabs([
     f"📋 Standard ({len(df_standard)})", 
@@ -103,14 +114,8 @@ def render_category_table(category_df, category_name):
         st.info(f"No {category_name} found.")
         return
     
-    # Apply search filter
+    # Search filtering already applied during data load
     filtered_df = category_df.copy()
-    if search_term:
-        term = search_term.lower()
-        filtered_df = filtered_df[
-            filtered_df["name"].str.lower().str.contains(term, na=False) |
-            filtered_df["id"].str.lower().str.contains(term, na=False)
-        ]
     
     # Category-specific metrics
     total_value_new = filtered_df["new_price"].sum()
