@@ -13,31 +13,117 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 
+# ============================================================================
+# CONNECTION POOLING - Singleton pattern using Streamlit's cache_resource
+# ============================================================================
+@st.cache_resource
+def get_db_connection():
+    """
+    Creates and caches a single PostgreSQL connection for the entire session.
+    This eliminates the overhead of creating 50+ connections per page load.
+    
+    Returns:
+        psycopg2.connection: Persistent database connection
+    """
+    try:
+        db_config = st.secrets["supabase"]
+        conn = psycopg2.connect(
+            host=db_config["host"],
+            port=db_config["port"],
+            dbname=db_config["dbname"],
+            user=db_config["user"],
+            password=db_config["password"]
+        )
+        
+        # Initialize tables once when connection is first created
+        cursor = conn.cursor()
+        _init_tables_once(cursor, conn)
+        cursor.close()
+        
+        logging.info("✅ Database connection pool initialized")
+        return conn
+    except Exception as e:
+        logging.error(f"❌ Database connection failed: {e}")
+        raise e
+
+def _init_tables_once(cursor, conn):
+    """Creates the necessary tables if they don't exist (called once on connection creation)."""
+    try:
+        # Table for Items
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS items (
+                item_id TEXT PRIMARY KEY,
+                json_data TEXT,
+                updated_at TIMESTAMPTZ
+            );
+        ''')
+        
+        # Table for Inventory Lists
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS inventory_lists (
+                set_id TEXT PRIMARY KEY,
+                json_data TEXT,
+                updated_at TIMESTAMPTZ
+            );
+        ''')
+
+        # Table for Collections
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS collections (
+                item_id TEXT,
+                collection_name TEXT,
+                added_at TIMESTAMPTZ,
+                PRIMARY KEY (item_id, collection_name)
+            );
+        ''')
+        
+        # Table for Price History
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS price_history (
+                id SERIAL PRIMARY KEY,
+                item_id TEXT NOT NULL,
+                price_new REAL,
+                price_used REAL,
+                confidence_new TEXT,
+                confidence_used TEXT,
+                scraped_at TIMESTAMPTZ NOT NULL,
+                FOREIGN KEY (item_id) REFERENCES items(item_id) ON DELETE CASCADE
+            );
+        ''')
+        
+        # Create indexes for price_history
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_price_history_item_id ON price_history(item_id);')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_price_history_scraped_at ON price_history(scraped_at);')
+        
+        # Add cached columns to items table (if not exists)
+        cursor.execute('ALTER TABLE items ADD COLUMN IF NOT EXISTS cached_rating TEXT;')
+        cursor.execute('ALTER TABLE items ADD COLUMN IF NOT EXISTS cached_profit REAL;')
+        cursor.execute('ALTER TABLE items ADD COLUMN IF NOT EXISTS cached_margin REAL;')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_items_cached_rating ON items(cached_rating);')
+        
+        conn.commit()
+        logging.info("✅ Database tables initialized")
+    except Exception as e:
+        conn.rollback()
+        logging.error(f"Table Init Failed: {e}")
+
 class Database:
     """
     Handles PostgreSQL (Supabase) database interactions.
     Manages item data, inventory lists, and collection tracking.
+    
+    Now uses connection pooling via get_db_connection() for better performance.
     """
 
     def __init__(self):
-        """Initializes the database connection using Streamlit secrets."""
+        """Initializes the database connection using cached connection pool."""
         try:
-            # Read secrets
-            db_config = st.secrets["supabase"]
-            
-            self.conn = psycopg2.connect(
-                host=db_config["host"],
-                port=db_config["port"],
-                dbname=db_config["dbname"],
-                user=db_config["user"],
-                password=db_config["password"]
-            )
+            # Reuse cached connection instead of creating new one
+            self.conn = get_db_connection()
             self.cursor = self.conn.cursor()
             
-            # Connection Check (Optional, but good for UI feedback if called explicitly)
-            # st.sidebar.success("Connected to Cloud DB") 
-            
-            self._init_tables()
+            # Only initialize tables once (on first connection creation)
+            # Tables are already created by the cached connection
             
         except Exception as e:
             logging.error(f"Database Connection Failed: {e}")

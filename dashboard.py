@@ -6,6 +6,7 @@ import os
 import time
 import logging
 from datetime import datetime, timedelta
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from database import Database
 from pricing_engine import PriceAnalyzer
 from scraper import BrickLinkScraper
@@ -472,13 +473,36 @@ def process_analysis(item_id, deep_scan_enabled, force_scrape=False, progress_ca
         "main_img": get_img_url(item_id)
     }
 
+# --- SMART CACHE INVALIDATION ---
+def get_latest_update_timestamp():
+    """
+    Get the most recent update timestamp from the database.
+    Used as cache key to invalidate load_data() only when data actually changes.
+    
+    Returns:
+        str: ISO format timestamp of most recent update, or "no_data" if empty
+    """
+    try:
+        db = Database()
+        db.cursor.execute("SELECT MAX(updated_at) FROM items")
+        latest = db.cursor.fetchone()[0]
+        db.close()
+        return latest.isoformat() if latest else "no_data"
+    except:
+        # Fallback to current time if query fails (forces cache refresh)
+        return datetime.now().isoformat()
+
 # --- DATA LOADING ---
-@st.cache_data(show_spinner=False, ttl=10)
-def load_data():
+@st.cache_data(show_spinner=False, ttl=300)  # 5 minutes (increased from 10s)
+def load_data(_cache_key):
     db = Database()
     
-    # 1. Fetch Items
-    db.cursor.execute("SELECT item_id, json_data, updated_at FROM items")
+    # 1. Fetch Items WITH CACHED COLUMNS (Performance Optimization)
+    db.cursor.execute("""
+        SELECT item_id, json_data, updated_at, 
+               cached_rating, cached_profit, cached_margin
+        FROM items
+    """)
     all_rows = db.cursor.fetchall()
     
     # 2. Fetch Stale Items
@@ -524,37 +548,51 @@ def load_data():
     junk_keywords = ['python', 'streamlit', 'n', 'test', 'runner', 'cmd']
 
     for row in all_rows:
+        # Unpack row with cached columns
         item_id = str(row[0]).strip()
-        if any(key in item_id.lower() for key in junk_keywords) or len(item_id) < 2: continue
+        json_data = row[1]
+        updated_at = row[2]
+        cached_rating = row[3]
+        cached_profit = row[4] if row[4] is not None else 0.0
+        cached_margin = row[5] if row[5] is not None else 0.0
+        
+        if any(key in item_id.lower() for key in junk_keywords) or len(item_id) < 2: 
+            continue
 
         try:
-            raw_data = json.loads(row[1])
+            # Parse JSON ONLY for metadata (name, year, prices, confidence)
+            # NO MORE PriceAnalyzer.analyze() calls! ✅
+            data = json.loads(json_data)
             is_stale = item_id in stale_items
             
-            analysis = PriceAnalyzer(raw_data).analyze()
-            sniper = analysis.get("deep_dive", {}).get("sniper", {})
+            # Extract metadata directly from JSON
+            meta = data.get("meta", {})
+            new_data = data.get("new", {})
+            used_data = data.get("used", {})
             
-            yr = analysis.get("meta", {}).get("year_released")
+            yr = meta.get("year_released")
             year_val = str(int(float(yr))) if yr and str(yr).replace('.0','').isdigit() else ""
             
-            used_price = analysis.get("used", {}).get("market_price", 0)
+            new_price = new_data.get("market_price", 0)
+            used_price = used_data.get("market_price", 0)
             price_map[item_id] = used_price
 
             item = {
                 "ID": item_id,
                 "Image": get_img_url(item_id),
-                "Name": analysis.get("meta", {}).get("item_name", "Unknown"),
+                "Name": meta.get("item_name", "Unknown"),
                 "Year": year_val,
-                "New Price": analysis.get("new", {}).get("market_price", 0),
-                "New Conf": analysis.get("new", {}).get("confidence", "N/A"),
+                "New Price": new_price,
+                "New Conf": new_data.get("confidence", "N/A"),
                 "Used Price": used_price,
-                "Used Conf": analysis.get("used", {}).get("confidence", "N/A"),
-                "Profit": sniper.get("profit_abs", 0),
-                "Margin %": sniper.get("margin_pct", 0),
-                "Rating": sniper.get("rating", "N/A"),
+                "Used Conf": used_data.get("confidence", "N/A"),
+                # USE CACHED VALUES instead of re-analyzing ✅
+                "Profit": cached_profit,
+                "Margin %": cached_margin,
+                "Rating": cached_rating if cached_rating else "N/A",
                 "InCollection": item_id.lower() in collection_ids,
                 "Stale": "⚠️" if is_stale else "✅",
-                "Last Scraped": row[2] if len(row) > 2 else None
+                "Last Scraped": updated_at
             }
             if any(c.isalpha() for c in item_id): figs.append(item)
             else: sets.append(item)
@@ -658,7 +696,9 @@ if mode == "📊 Set Analyzer Database":
             except Exception as e:
                 st.error(f"Import failed: {e}")
     
-    df_sets, df_figs = load_data()
+    # Smart cache invalidation - only reload when data actually changes
+    cache_key = get_latest_update_timestamp()
+    df_sets, df_figs = load_data(cache_key)
     # Show full database only
     
     # Metrics
@@ -893,7 +933,8 @@ elif mode == "🔐 Ram's Collection":
     st.caption("Personal investment portfolio")
     
     # Load data filtered to Ram's Collection only
-    df_sets, df_figs = load_data()
+    cache_key = get_latest_update_timestamp()
+    df_sets, df_figs = load_data(cache_key)
     
     # Filter to Ram's Collection
     if not df_sets.empty:
@@ -1128,7 +1169,8 @@ elif mode == "🔐 Udi's Collection":
     st.caption("Personal investment portfolio")
     
     # Load data filtered to Udi's Collection only
-    df_sets, df_figs = load_data()
+    cache_key = get_latest_update_timestamp()
+    df_sets, df_figs = load_data(cache_key)
     
     # Filter to Udi's Collection (using a different collection name in database)
     # Note: Items need to be added to "Udi's Collection" via Set Analyzer
@@ -1310,23 +1352,62 @@ elif mode == "🔎 Set Analyzer":
             
             raw_ids = ids
             
-            # BATCH MODE
+            # BATCH MODE - PARALLEL PROCESSING
             if len(raw_ids) > 1:
                 with st.chat_message("assistant"):
-                    st.write(f"🚀 Batch Processing {len(raw_ids)} items... (Force: {force_mode})")
+                    st.write(f"🚀 Batch Processing {len(raw_ids)} items in parallel... (Force: {force_mode})")
+                    
+                    # Helper function for thread-safe processing
+                    def process_single_item(item_id):
+                        """Wrapper for thread-safe processing"""
+                        try:
+                            return process_analysis(item_id, deep_scan, force_scrape=force_mode)
+                        except Exception as e:
+                            return {"error": str(e), "item_id": item_id, "success": False}
+                    
+                    # Parallel processing setup
+                    total_items = len(raw_ids)
+                    start_time = time.time()
                     prog_bar = st.progress(0)
                     status_txt = st.empty()
                     
                     summaries = []
                     expanders_data = []
                     
-                    for i, item_id in enumerate(raw_ids):
-                        status_txt.write(f"Processing {item_id} ({i+1}/{len(raw_ids)})...")
+                    with ThreadPoolExecutor(max_workers=5) as executor:
+                        # Submit all tasks
+                        futures = {
+                            executor.submit(process_single_item, item_id): item_id
+                            for item_id in raw_ids
+                        }
                         
-                        try:
-                            # Pass force_scrape
-                            res = process_analysis(item_id, deep_scan, force_scrape=force_mode, progress_callback=status_txt.write)
+                        # Process results as they complete
+                        for i, future in enumerate(as_completed(futures)):
+                            item_id = futures[future]
                             
+                            # --- Time Estimation Logic ---
+                            completed = i + 1
+                            elapsed_time = time.time() - start_time
+                            avg_time_per_item = elapsed_time / completed
+                            remaining_items = total_items - completed
+                            est_seconds_left = int(avg_time_per_item * remaining_items)
+                            
+                            # Format time nicely (e.g., 00:12)
+                            mins, secs = divmod(est_seconds_left, 60)
+                            time_str = f"{mins:02d}:{secs:02d}"
+                            
+                            # Update Status with Progress & Time
+                            status_txt.markdown(f"""
+                                **Processing:** `{item_id}` ({completed}/{total_items})  
+                                ⏳ **Time Remaining:** {time_str}  
+                                🚀 **Speed:** {avg_time_per_item:.1f}s/item
+                            """)
+                            
+                            prog_bar.progress(completed / total_items)
+                            # -----------------------------
+                            
+                            # Get result
+                            res = future.result()
                             if res.get("success"):
                                 summaries.append(res["summary"])
                                 expanders_data.append({
@@ -1339,10 +1420,6 @@ elif mode == "🔎 Set Analyzer":
                                 })
                             else:
                                 st.error(f"Error {item_id}: {res.get('error')}")
-                        except Exception as e:
-                            st.error(f"Crash on {item_id}: {e}")
-                        
-                        prog_bar.progress((i + 1) / len(raw_ids))
                     
                     prog_bar.empty()
                     status_txt.empty()
