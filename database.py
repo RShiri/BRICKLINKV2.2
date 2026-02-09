@@ -23,15 +23,15 @@ def get_db_pool():
     This supports concurrent access from multiple devices/sessions (PC + phone).
     
     Returns:
-        psycopg2.pool.ThreadedConnectionPool: Connection pool with 2-10 connections
+        psycopg2.pool.ThreadedConnectionPool: Connection pool with 5-20 connections
     """
     try:
         from psycopg2 import pool
         
         db_config = st.secrets["supabase"]
         connection_pool = pool.ThreadedConnectionPool(
-            minconn=2,  # Minimum connections
-            maxconn=10,  # Maximum connections
+            minconn=5,   # Minimum connections (increased from 2)
+            maxconn=20,  # Maximum connections (increased from 10)
             host=db_config["host"],
             port=db_config["port"],
             dbname=db_config["dbname"],
@@ -48,7 +48,7 @@ def get_db_pool():
         finally:
             connection_pool.putconn(conn)
         
-        logging.info("✅ Database connection pool initialized (2-10 connections)")
+        logging.info("✅ Database connection pool initialized (5-20 connections)")
         return connection_pool
     except Exception as e:
         logging.error(f"❌ Database pool creation failed: {e}")
