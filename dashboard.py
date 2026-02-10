@@ -585,6 +585,8 @@ def load_data(_cache_key):
                 raw_id = str(row['Number']).strip().lower()
                 base_id = raw_id.split('-')[0] if '-' in raw_id else raw_id
                 collection_ids.add(base_id)
+    except: pass
+    
     try:
         # 1. Fetch Items WITH CACHED COLUMNS (Performance Optimization)
         db.cursor.execute("""
