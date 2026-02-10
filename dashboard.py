@@ -666,7 +666,10 @@ def load_data(_cache_key):
                     "Margin %": cached_margin or 0,
                     "Rating": cached_rating or "N/A",
                     "InCollection": item_id.lower() in collection_ids,
-                    "Stale": is_stale
+                    "Stale": is_stale,
+                    # Initialize columns that will be updated in polybag logic
+                    "Figs %": 0.0,
+                    "Part-Out Alert": ""
                 }
                 
                 # Categorize
