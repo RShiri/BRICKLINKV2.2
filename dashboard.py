@@ -1032,12 +1032,12 @@ if mode == "📊 Set Analyzer Database":
         else:
             st.info("🔍 No hot deals in the last 24 hours. Check back later or run Set Analyzer to find new opportunities!")
     
+    except Exception as e:
+        st.warning(f"⚠️ War Room temporarily unavailable: {e}")
+    
     finally:
         # ALWAYS close the database connection
         db.close()
-    
-    except Exception as e:
-        st.warning(f"⚠️ War Room temporarily unavailable: {e}")
 
 
 elif mode == "🔐 Ram's Collection":
