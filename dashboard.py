@@ -631,21 +631,25 @@ def load_data(_cache_key):
                 continue
 
             try:
-                # Parse JSON ONLY for metadata (name, year, prices, confidence)
-                # NO MORE PriceAnalyzer.analyze() calls! ✅
+                # Parse JSON for metadata and price calculation
                 data = json.loads(json_data)
                 is_stale = item_id in stale_items
                 
                 # Extract metadata directly from JSON
                 meta = data.get("meta", {})
-                new_data = data.get("new", {})
-                used_data = data.get("used", {})
                 
                 yr = meta.get("year_released")
                 year_val = str(int(float(yr))) if yr and str(yr).replace('.0','').isdigit() else ""
                 
-                new_price = new_data.get("market_price", 0)
-                used_price = used_data.get("market_price", 0)
+                # Calculate prices using PriceAnalyzer (market_price not in JSON!)
+                analyzer = PriceAnalyzer(data)
+                analysis = analyzer.analyze()
+                
+                new_price = analysis.get("new", {}).get("market_price", 0)
+                used_price = analysis.get("used", {}).get("market_price", 0)
+                new_conf = analysis.get("new", {}).get("confidence", "N/A")
+                used_conf = analysis.get("used", {}).get("confidence", "N/A")
+                
                 price_map[item_id] = used_price
 
                 item = {
@@ -654,9 +658,9 @@ def load_data(_cache_key):
                     "Name": meta.get("item_name", "Unknown"),
                     "Year": year_val,
                     "New Price": new_price,
-                    "New Conf": new_data.get("confidence", "N/A"),
+                    "New Conf": new_conf,
                     "Used Price": used_price,
-                    "Used Conf": used_data.get("confidence", "N/A"),
+                    "Used Conf": used_conf,
                     # USE CACHED VALUES instead of re-analyzing ✅
                     "Profit": cached_profit or 0,
                     "Margin %": cached_margin or 0,
