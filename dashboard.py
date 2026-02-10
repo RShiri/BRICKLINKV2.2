@@ -57,7 +57,7 @@ def render_about_me_content():
         
         st.subheader("🛠️ Skills & Approach")
         st.write("""
-        - **Tech Stack:** Python, Java, SQL, Pandas, Streamlit, Plotly
+        - **Tech Stack:** Python (Advanced), PostgreSQL, SQL, Pandas, Streamlit, Web Scraping (Selenium/Playwright).
         - **Soft Skills:** Creative thinking, fast learning, hands-on problem solving
         - **Philosophy:** Comfortable working with AI tools to accelerate development (like this dashboard!) while maintaining deep understanding of the core logic.
         """)
