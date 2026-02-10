@@ -749,7 +749,57 @@ if st.session_state.user_role == "admin":
 
 mode = st.sidebar.radio("Navigation", nav_options, index=0)
 
-
+# Admin Controls for Collections
+if st.session_state.user_role == "admin" and mode in ["🔐 Ram's Collection", "🔐 Udi's Collection"]:
+    st.sidebar.divider()
+    st.sidebar.markdown("### 🛠️ Collection Management")
+    
+    # Determine which collection we're managing
+    current_collection = "Ram's Collection" if mode == "🔐 Ram's Collection" else "Udi's Collection"
+    
+    # Add Item Input
+    add_item_id = st.sidebar.text_input(
+        "➕ Add Item",
+        placeholder="Enter Set ID (e.g., 76042) or Minifig ID (e.g., sh0232)",
+        help="Add a set (with its minifigs) or a single minifig to your collection"
+    )
+    
+    if st.sidebar.button("Add to Collection", use_container_width=True):
+        if add_item_id:
+            add_item_id = add_item_id.strip()
+            db = Database()
+            try:
+                # Check if it's a set (no letters) or minifig (has letters)
+                is_set = not any(c.isalpha() for c in add_item_id)
+                
+                if is_set:
+                    # Add set to collection
+                    db.add_to_collection(add_item_id, current_collection)
+                    
+                    # Get inventory and add minifigs
+                    inv = db.get_inventory_list(add_item_id)
+                    if inv and "minifigs" in inv:
+                        for fig in inv["minifigs"]:
+                            fig_id = fig["id"]
+                            db.add_to_collection(fig_id, current_collection)
+                        st.sidebar.success(f"✅ Added {add_item_id} + {len(inv['minifigs'])} minifigs")
+                    else:
+                        st.sidebar.success(f"✅ Added {add_item_id}")
+                else:
+                    # Add minifig to collection
+                    db.add_to_collection(add_item_id, current_collection)
+                    st.sidebar.success(f"✅ Added {add_item_id}")
+                
+                db.conn.commit()
+                db.close()
+                st.cache_data.clear()
+                time.sleep(1)
+                st.rerun()
+            except Exception as e:
+                db.close()
+                st.sidebar.error(f"Failed: {e}")
+        else:
+            st.sidebar.warning("Please enter an item ID")
 
 # Separate About Me Section
 st.sidebar.divider()
@@ -1647,30 +1697,10 @@ elif mode == "🔎 Set Analyzer":
                         })
                         st.toast(f"✅ {item_id} analyzed!", icon="💾")
                         
-                        # Manual Add to Collection (Admin Only)
+                        # Confirmation message
                         if st.session_state.user_role == "admin":
-                            col_db, col_ram = st.columns(2)
-                            
-                            with col_db:
-                                st.button("✅ Saved to Global DB", disabled=True, help="This item is already auto-saved to the main database.")
-                                
-                            with col_ram:
-                                if st.button(f"➕ Add to Ram's Collection"):
-                                    db = Database()
-                                    try:
-                                        db.add_to_collection(item_id, "Ram's Collection")
-                                        db.conn.commit()  # Explicit commit to ensure transaction completes
-                                        db.close()
-                                        st.toast(f"✅ Added {item_id} to Ram's Collection", icon="📂")
-                                        st.cache_data.clear()
-                                        time.sleep(1.5)  # Increased delay to ensure DB write completes
-                                        st.rerun()
-                                    except Exception as e:
-                                        db.close()
-                                        st.error(f"Failed to add to collection: {e}")
-                                        logging.error(f"Add to collection failed for {item_id}: {e}")
+                            st.success("✅ Item saved to database! Use sidebar to add to collection.")
                         else:
-                            # User mode: Just show confirmation that item is saved
                             st.success("✅ Item saved to database successfully!")
 
                         st.cache_data.clear()
