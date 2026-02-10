@@ -631,24 +631,39 @@ def load_data(_cache_key):
                 continue
 
             try:
-                # Parse JSON for metadata and price calculation
+                # Parse JSON for metadata and simple price calculation
                 data = json.loads(json_data)
                 is_stale = item_id in stale_items
                 
-                # Extract metadata directly from JSON
+                # Extract metadata
                 meta = data.get("meta", {})
-                
                 yr = meta.get("year_released")
                 year_val = str(int(float(yr))) if yr and str(yr).replace('.0','').isdigit() else ""
                 
-                # Calculate prices using PriceAnalyzer (market_price not in JSON!)
-                analyzer = PriceAnalyzer(data)
-                analysis = analyzer.analyze()
+                # Simple price calculation (average of sold prices)
+                def calc_simple_price(condition_data):
+                    sold = condition_data.get("sold", [])
+                    if not sold:
+                        return 0, "NO DATA"
+                    
+                    prices = [item.get("price", 0) for item in sold if item.get("price", 0) > 0]
+                    if not prices:
+                        return 0, "NO DATA"
+                    
+                    avg_price = sum(prices) / len(prices)
+                    
+                    if len(prices) >= 10:
+                        return avg_price, "HIGH"
+                    elif len(prices) >= 5:
+                        return avg_price, "MEDIUM"
+                    else:
+                        return avg_price, "LOW"
                 
-                new_price = analysis.get("new", {}).get("market_price", 0)
-                used_price = analysis.get("used", {}).get("market_price", 0)
-                new_conf = analysis.get("new", {}).get("confidence", "N/A")
-                used_conf = analysis.get("used", {}).get("confidence", "N/A")
+                new_data = data.get("new", {})
+                used_data = data.get("used", {})
+                
+                new_price, new_conf = calc_simple_price(new_data)
+                used_price, used_conf = calc_simple_price(used_data)
                 
                 price_map[item_id] = used_price
 
