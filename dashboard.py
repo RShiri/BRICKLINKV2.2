@@ -991,8 +991,8 @@ if mode == "📊 Set Analyzer Database":
     st.markdown("## 🎯 Sniper War Room")
     st.caption("⚡ Best investment opportunities updated in the last 24 hours")
     
+    db = Database()
     try:
-        db = Database()
         cutoff_time = (datetime.now() - timedelta(hours=24)).isoformat()
         
         # FAST query using cached columns (no JSON parsing needed)
@@ -1031,10 +1031,13 @@ if mode == "📊 Set Analyzer Database":
             }, hide_index=True, use_container_width=True)
         else:
             st.info("🔍 No hot deals in the last 24 hours. Check back later or run Set Analyzer to find new opportunities!")
-        
+    
+    finally:
+        # ALWAYS close the database connection
         db.close()
-    except Exception as e:
-        st.warning(f"⚠️ War Room temporarily unavailable: {e}")
+        
+except Exception as e:
+    st.warning(f"⚠️ War Room temporarily unavailable: {e}")
 
 
 elif mode == "🔐 Ram's Collection":
