@@ -874,7 +874,6 @@ if mode == "📊 Set Analyzer Database":
             # Read-only View for Users
             st.dataframe(
                 df_display,
-                width=None,
                 height=800,
                 hide_index=True,
                 column_config={
