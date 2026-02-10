@@ -788,12 +788,14 @@ if st.session_state.user_role == "admin" and mode in ["🔐 Ram's Collection", "
                     db.add_to_collection(add_item_id, current_collection)
                     
                     # Get inventory and add minifigs
-                    inv = db.get_inventory_list(add_item_id)
-                    if inv and "minifigs" in inv:
-                        for fig in inv["minifigs"]:
+                    db.cursor.execute("SELECT json_data FROM inventory_lists WHERE set_id = %s", (add_item_id,))
+                    result = db.cursor.fetchone()
+                    if result:
+                        inv = json.loads(result[0])
+                        for fig in inv:
                             fig_id = fig["id"]
                             db.add_to_collection(fig_id, current_collection)
-                        st.sidebar.success(f"✅ Added {add_item_id} + {len(inv['minifigs'])} minifigs")
+                        st.sidebar.success(f"✅ Added {add_item_id} + {len(inv)} minifigs")
                     else:
                         st.sidebar.success(f"✅ Added {add_item_id}")
                 else:
