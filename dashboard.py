@@ -1657,12 +1657,18 @@ elif mode == "🔎 Set Analyzer":
                             with col_ram:
                                 if st.button(f"➕ Add to Ram's Collection"):
                                     db = Database()
-                                    db.add_to_collection(item_id, "Ram's Collection")
-                                    db.close()
-                                    st.toast(f"Added {item_id} to Ram's Collection", icon="📂")
-                                    st.cache_data.clear()
-                                    time.sleep(1)
-                                    st.rerun()
+                                    try:
+                                        db.add_to_collection(item_id, "Ram's Collection")
+                                        db.conn.commit()  # Explicit commit to ensure transaction completes
+                                        db.close()
+                                        st.toast(f"✅ Added {item_id} to Ram's Collection", icon="📂")
+                                        st.cache_data.clear()
+                                        time.sleep(1.5)  # Increased delay to ensure DB write completes
+                                        st.rerun()
+                                    except Exception as e:
+                                        db.close()
+                                        st.error(f"Failed to add to collection: {e}")
+                                        logging.error(f"Add to collection failed for {item_id}: {e}")
                         else:
                             # User mode: Just show confirmation that item is saved
                             st.success("✅ Item saved to database successfully!")
