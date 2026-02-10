@@ -239,6 +239,17 @@ def delete_from_db(item_id):
     item_id = str(item_id).strip()
     db = Database()
     try:
+        # If deleting a set, also remove its minifigs from collection
+        if not any(c.isalpha() for c in item_id):  # It's a set (no letters)
+            # Get inventory to find minifigs
+            inv = db.get_inventory_list(item_id)
+            if inv and "minifigs" in inv:
+                st.info(f"🔗 Removing {len(inv['minifigs'])} minifigs from collection...")
+                for fig in inv["minifigs"]:
+                    fig_id = fig["id"]
+                    db.remove_from_collection(fig_id, "Ram's Collection")
+                    db.remove_from_collection(fig_id, "Udi's Collection")
+        
         # PostgreSQL uses %s, not ?
         db.cursor.execute("DELETE FROM items WHERE item_id = %s", (item_id,))
         deleted_items = db.cursor.rowcount
