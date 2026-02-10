@@ -556,6 +556,7 @@ def get_latest_update_timestamp():
 # --- DATA LOADING ---
 @st.cache_data(show_spinner=False, ttl=300)  # 5 minutes (increased from 10s)
 def load_data(_cache_key):
+    # Force redeploy - connection leak fix
     db = Database()
     
     # 1. Fetch Items WITH CACHED COLUMNS (Performance Optimization)
