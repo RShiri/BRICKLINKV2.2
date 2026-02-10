@@ -104,7 +104,7 @@ if "show_readme" not in st.session_state:
 
 # Role selection page
 if st.session_state.user_role is None:
-    st.title("🧱 BrickLink Sniper V1.3")
+    st.title("🧱 BrickLink Sniper V1.4")
     st.markdown("### Welcome! Please select your access level:")
     
     col1, col2 = st.columns(2)
