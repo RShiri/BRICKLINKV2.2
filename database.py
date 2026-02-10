@@ -19,19 +19,17 @@ logging.basicConfig(
 @st.cache_resource
 def get_db_pool():
     """
-    Creates and caches a ThreadedConnectionPool for the entire application.
-    This supports concurrent access from multiple devices/sessions (PC + phone).
-    
-    Returns:
-        psycopg2.pool.ThreadedConnectionPool: Connection pool with 5-20 connections
+    Creates a ThreadedConnectionPool that is cached across all sessions.
+    This allows multiple Database() instances to share connections efficiently.
+    Pool size: 10-50 connections (increased to handle high load)
     """
     try:
         from psycopg2 import pool
         
         db_config = st.secrets["supabase"]
         connection_pool = pool.ThreadedConnectionPool(
-            minconn=5,   # Minimum connections (increased from 2)
-            maxconn=20,  # Maximum connections (increased from 10)
+            minconn=10,
+            maxconn=50,  # Increased from 20 to 50
             host=db_config["host"],
             port=db_config["port"],
             dbname=db_config["dbname"],
@@ -48,7 +46,7 @@ def get_db_pool():
         finally:
             connection_pool.putconn(conn)
         
-        logging.info("✅ Database connection pool initialized (5-20 connections)")
+        logging.info("✅ Database connection pool initialized (10-50 connections)")
         return connection_pool
     except Exception as e:
         logging.error(f"❌ Database pool creation failed: {e}")
