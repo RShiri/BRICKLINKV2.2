@@ -1425,8 +1425,8 @@ elif mode == "🔎 Set Analyzer":
             # BATCH MODE - SMART PROCESSING (Sequential for small, Parallel for large)
             if len(raw_ids) > 1:
                 with st.chat_message("assistant"):
-                    # Use sequential for small batches (≤3 items), parallel for larger
-                    use_parallel = len(raw_ids) > 3
+                    # Use sequential for small batches (≤5 items), parallel for larger
+                    use_parallel = len(raw_ids) > 5
                     
                     if use_parallel:
                         st.write(f"🚀 Batch Processing {len(raw_ids)} items in parallel... (Force: {force_mode})")
@@ -1451,7 +1451,7 @@ elif mode == "🔎 Set Analyzer":
                     expanders_data = []
                     
                     if use_parallel:
-                        # PARALLEL PROCESSING (for batches > 3 items)
+                        # PARALLEL PROCESSING (for batches > 5 items)
                         # Using 2 workers to prevent pool exhaustion
                         with ThreadPoolExecutor(max_workers=2) as executor:
                             # Submit all tasks
@@ -1503,7 +1503,7 @@ elif mode == "🔎 Set Analyzer":
                                     st.error(f"Error {item_id}: {str(e)}")
                     
                     else:
-                        # SEQUENTIAL PROCESSING (for batches ≤ 3 items)
+                        # SEQUENTIAL PROCESSING (for batches ≤ 5 items)
                         for idx, item_id in enumerate(raw_ids, 1):
                             # Update progress
                             prog_bar.progress(idx / total_items)
