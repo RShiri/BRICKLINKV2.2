@@ -585,108 +585,123 @@ def load_data(_cache_key):
                 raw_id = str(row['Number']).strip().lower()
                 base_id = raw_id.split('-')[0] if '-' in raw_id else raw_id
                 collection_ids.add(base_id)
-                collection_ids.add(raw_id)
-    except: pass
-
-    # 4. Fetch Inventory Map
-    inventory_map = {}
-    db.cursor.execute("SELECT set_id, json_data FROM inventory_lists")
-    inv_rows = db.cursor.fetchall()
-    db.close() # Close DB connection early
-
-    for r in inv_rows:
-        s_id = str(r[0])
-        figs_data = json.loads(r[1])
-        inventory_map[s_id] = [f['id'] for f in figs_data]
+    try:
+        # 1. Fetch Items WITH CACHED COLUMNS (Performance Optimization)
+        db.cursor.execute("""
+            SELECT item_id, json_data, updated_at, 
+                   cached_rating, cached_profit, cached_margin
+            FROM items
+        """)
+        all_rows = db.cursor.fetchall()
         
-        # If set is in collection, assume its figs are too (for visibility)
-        if s_id in collection_ids or f"{s_id}-1" in collection_ids:
-            for f in figs_data:
-                collection_ids.add(f['id'].lower())
-
-    sets, figs = [], []
-    price_map = {} 
-    junk_keywords = ['python', 'streamlit', 'n', 'test', 'runner', 'cmd']
-
-    for row in all_rows:
-        # Unpack row with cached columns
-        item_id = str(row[0]).strip()
-        json_data = row[1]
-        updated_at = row[2]
-        cached_rating = row[3]
-        cached_profit = row[4] if row[4] is not None else 0.0
-        cached_margin = row[5] if row[5] is not None else 0.0
+        # 2. Fetch Stale Items
+        stale_items = set(db.get_stale_items(days_threshold=30))
         
-        if any(key in item_id.lower() for key in junk_keywords) or len(item_id) < 2: 
-            continue
-
+        # 3. Fetch Collection (DB + CSV)
+        collection_ids = set()
+        
+        # From DB
+        db_collection = db.get_collection_items("Ram's Collection")
+        for cid in db_collection:
+            collection_ids.add(cid.lower())
+            
+        # From CSV (Legacy Support)
         try:
-            # Parse JSON ONLY for metadata (name, year, prices, confidence)
-            # NO MORE PriceAnalyzer.analyze() calls! ✅
-            data = json.loads(json_data)
-            is_stale = item_id in stale_items
+            csv_df = pd.read_csv("rams_collection.csv")
+            for cid in csv_df['ID'].astype(str):
+                collection_ids.add(cid.lower())
+        except: pass
+        
+        # 4. Build DataFrames
+        sets = []
+        figs = []
+        price_map = {}
+        
+        # Junk filter
+        junk_keywords = ['instruction', 'sticker', 'box', 'manual', 'catalog']
+        
+        for row in all_rows:
+            item_id, json_data, updated_at, cached_rating, cached_profit, cached_margin = row
             
-            # Extract metadata directly from JSON
-            meta = data.get("meta", {})
-            new_data = data.get("new", {})
-            used_data = data.get("used", {})
-            
-            yr = meta.get("year_released")
-            year_val = str(int(float(yr))) if yr and str(yr).replace('.0','').isdigit() else ""
-            
-            new_price = new_data.get("market_price", 0)
-            used_price = used_data.get("market_price", 0)
-            price_map[item_id] = used_price
+            # Skip junk items
+            if any(key in item_id.lower() for key in junk_keywords) or len(item_id) < 2: 
+                continue
 
-            item = {
-                "ID": item_id,
-                "Image": get_img_url(item_id),
-                "Name": meta.get("item_name", "Unknown"),
-                "Year": year_val,
-                "New Price": new_price,
-                "New Conf": new_data.get("confidence", "N/A"),
-                "Used Price": used_price,
-                "Used Conf": used_data.get("confidence", "N/A"),
-                # USE CACHED VALUES instead of re-analyzing ✅
-                "Profit": cached_profit,
-                "Margin %": cached_margin,
-                "Rating": cached_rating if cached_rating else "N/A",
-                "InCollection": item_id.lower() in collection_ids,
-                "Stale": "⚠️" if is_stale else "✅",
-                "Last Scraped": updated_at
-            }
-            if any(c.isalpha() for c in item_id): figs.append(item)
-            else: sets.append(item)
-        except: continue
+            try:
+                # Parse JSON ONLY for metadata (name, year, prices, confidence)
+                # NO MORE PriceAnalyzer.analyze() calls! ✅
+                data = json.loads(json_data)
+                is_stale = item_id in stale_items
+                
+                # Extract metadata directly from JSON
+                meta = data.get("meta", {})
+                new_data = data.get("new", {})
+                used_data = data.get("used", {})
+                
+                yr = meta.get("year_released")
+                year_val = str(int(float(yr))) if yr and str(yr).replace('.0','').isdigit() else ""
+                
+                new_price = new_data.get("market_price", 0)
+                used_price = used_data.get("market_price", 0)
+                price_map[item_id] = used_price
 
-    # Post-process sets for polybags & figs
-    for s in sets:
-        s_id = s["ID"]
-        fig_ids = inventory_map.get(s_id)
-        if not fig_ids and "-" in s_id: fig_ids = inventory_map.get(s_id.split("-")[0])
+                item = {
+                    "ID": item_id,
+                    "Image": get_img_url(item_id),
+                    "Name": meta.get("item_name", "Unknown"),
+                    "Year": year_val,
+                    "New Price": new_price,
+                    "New Conf": new_data.get("confidence", "N/A"),
+                    "Used Price": used_price,
+                    "Used Conf": used_data.get("confidence", "N/A"),
+                    # USE CACHED VALUES instead of re-analyzing ✅
+                    "Profit": cached_profit or 0,
+                    "Margin %": cached_margin or 0,
+                    "Rating": cached_rating or "N/A",
+                    "InCollection": item_id.lower() in collection_ids,
+                    "Stale": is_stale
+                }
+                
+                # Categorize
+                if any(c.isalpha() for c in item_id):
+                    figs.append(item)
+                else:
+                    sets.append(item)
+            except: pass
+        
+        # 5. Polybag Logic (Used Price = Sum of Minifigs)
+        for s in sets:
+            try:
+                inv = db.get_inventory_list(s["ID"])
+                if not inv or "minifigs" not in inv: continue
+                
+                fig_sum = 0.0
+                for fig in inv["minifigs"]:
+                    fig_id = fig["id"]
+                    qty = fig.get("quantity", 1)
+                    fig_price = price_map.get(fig_id, 0)
+                    fig_sum += (fig_price * qty)
+                
+                s["Figs %"] = 0.0
+                s["Part-Out Alert"] = ""
+                
+                # Polybag: if set has 0.00 used price, use fig sum
+                if s["Used Price"] == 0 and fig_sum > 0:
+                    s["Used Price"] = fig_sum
+                    s["Used Conf"] = "Polybag (Figs)"
+                
+                # Figs % for Used Sets
+                if s["Used Price"] > 0:
+                    pct = (fig_sum / s["Used Price"]) * 100
+                    s["Figs %"] = pct
+                    if pct > 80: s["Part-Out Alert"] = "🔥"
+            except: pass
 
-        s["Minifig Count"] = len(fig_ids) if fig_ids else 0
-        s["Total Figs Value"] = 0.0
-        s["Figs %"] = 0.0
-        s["Part-Out Alert"] = ""
-
-        if fig_ids:
-            fig_sum = sum(price_map.get(fid, 0) for fid in fig_ids)
-            s["Total Figs Value"] = fig_sum
-            
-            # Polybag Override
-            name_lower = s["Name"].lower()
-            if ("polybag" in name_lower or "foil pack" in name_lower) and fig_sum > 0:
-                s["Used Price"] = fig_sum
-                s["Used Conf"] = "Polybag (Figs)"
-            
-            # Figs % for Used Sets
-            if s["Used Price"] > 0:
-                pct = (fig_sum / s["Used Price"]) * 100
-                s["Figs %"] = pct
-                if pct > 80: s["Part-Out Alert"] = "🔥"
-
-    return pd.DataFrame(sets), pd.DataFrame(figs)
+        return pd.DataFrame(sets), pd.DataFrame(figs)
+    
+    finally:
+        # ALWAYS close the database connection
+        db.close()
 
 # --- SIDEBAR NAV ---
 # Build navigation options based on role
