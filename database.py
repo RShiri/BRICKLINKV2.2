@@ -52,6 +52,18 @@ def get_db_pool():
         logging.error(f"❌ Database pool creation failed: {e}")
         raise e
 
+def reset_db_pool():
+    """
+    Emergency function to reset the connection pool.
+    Call this if you encounter 'connection pool exhausted' errors.
+    """
+    try:
+        get_db_pool.clear()
+        logging.warning("⚠️ Connection pool was reset")
+        st.toast("Connection pool reset", icon="♻️")
+    except Exception as e:
+        logging.error(f"Failed to reset pool: {e}")
+
 def _init_tables_once(cursor, conn):
     """Creates the necessary tables if they don't exist (called once on pool creation)."""
     try:

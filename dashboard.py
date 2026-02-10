@@ -767,7 +767,18 @@ if st.session_state.user_role == "admin" and mode in ["🔐 Ram's Collection", "
     if st.sidebar.button("Add to Collection", use_container_width=True):
         if add_item_id:
             add_item_id = add_item_id.strip()
-            db = Database()
+            try:
+                db = Database()
+            except Exception as pool_error:
+                if "pool exhausted" in str(pool_error):
+                    st.sidebar.warning("⚠️ Pool exhausted, resetting...")
+                    from database import reset_db_pool
+                    reset_db_pool()
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    raise pool_error
+            
             try:
                 # Check if it's a set (no letters) or minifig (has letters)
                 is_set = not any(c.isalpha() for c in add_item_id)
