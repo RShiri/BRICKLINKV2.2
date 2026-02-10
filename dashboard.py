@@ -1035,9 +1035,9 @@ if mode == "📊 Set Analyzer Database":
     finally:
         # ALWAYS close the database connection
         db.close()
-        
-except Exception as e:
-    st.warning(f"⚠️ War Room temporarily unavailable: {e}")
+    
+    except Exception as e:
+        st.warning(f"⚠️ War Room temporarily unavailable: {e}")
 
 
 elif mode == "🔐 Ram's Collection":
