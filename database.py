@@ -1,4 +1,4 @@
-import sqlite3
+import psycopg2
 import json
 import os
 import logging
@@ -14,35 +14,48 @@ logging.basicConfig(
 )
 
 # ============================================================================
-# CONNECTION POOLING - Shared local SQLite connection
+# CONNECTION POOLING - Thread-safe pool for multi-session support
 # ============================================================================
 @st.cache_resource
 def get_db_pool():
     """
-    Creates a single SQLite connection that is cached across all sessions.
-    This replaces psycopg2's ThreadedConnectionPool.
+    Creates a ThreadedConnectionPool that is cached across all sessions.
+    This allows multiple Database() instances to share connections efficiently.
+    Pool size: 10-50 connections (increased to handle high load)
     """
     try:
-        # Connect to local SQLite DB
-        conn = sqlite3.connect('bricklink_data.db', check_same_thread=False, timeout=15)
-        # Performance optimizations for SQLite multithreading
-        conn.execute('PRAGMA journal_mode=WAL')
-        conn.execute('PRAGMA synchronous=NORMAL')
-        
-        # Initialize tables once
-        cursor = conn.cursor()
-        _init_tables_once(cursor, conn)
-        cursor.close()
-        
-        logging.info("✅ Local SQLite Database connection initialized")
-        return conn
+        from psycopg2 import pool
+
+        db_config = st.secrets["supabase"]
+        connection_pool = pool.ThreadedConnectionPool(
+            minconn=10,
+            maxconn=50,
+            host=db_config["host"],
+            port=db_config["port"],
+            dbname=db_config["dbname"],
+            user=db_config["user"],
+            password=db_config["password"]
+        )
+
+        # Initialize tables once using a connection from the pool
+        conn = connection_pool.getconn()
+        try:
+            cursor = conn.cursor()
+            _init_tables_once(cursor, conn)
+            cursor.close()
+        finally:
+            connection_pool.putconn(conn)
+
+        logging.info("✅ Database connection pool initialized (10-50 connections)")
+        return connection_pool
     except Exception as e:
-        logging.error(f"❌ Database connection failed: {e}")
+        logging.error(f"❌ Database pool creation failed: {e}")
         raise e
 
 def reset_db_pool():
     """
     Emergency function to reset the connection pool.
+    Call this if you encounter 'connection pool exhausted' errors.
     """
     try:
         get_db_pool.clear()
@@ -52,21 +65,21 @@ def reset_db_pool():
         logging.error(f"Failed to reset pool: {e}")
 
 def _init_tables_once(cursor, conn):
-    """Creates the necessary tables if they don't exist."""
+    """Creates the necessary tables if they don't exist (called once on pool creation)."""
     try:
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS items (
                 item_id TEXT PRIMARY KEY,
                 json_data TEXT,
-                updated_at DATETIME
+                updated_at TIMESTAMPTZ
             );
         ''')
-        
+
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS inventory_lists (
                 set_id TEXT PRIMARY KEY,
                 json_data TEXT,
-                updated_at DATETIME
+                updated_at TIMESTAMPTZ
             );
         ''')
 
@@ -74,44 +87,32 @@ def _init_tables_once(cursor, conn):
             CREATE TABLE IF NOT EXISTS collections (
                 item_id TEXT,
                 collection_name TEXT,
-                added_at DATETIME,
+                added_at TIMESTAMPTZ,
                 PRIMARY KEY (item_id, collection_name)
             );
         ''')
-        
+
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS price_history (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 item_id TEXT NOT NULL,
                 price_new REAL,
                 price_used REAL,
                 confidence_new TEXT,
                 confidence_used TEXT,
-                scraped_at DATETIME NOT NULL,
+                scraped_at TIMESTAMPTZ NOT NULL,
                 FOREIGN KEY (item_id) REFERENCES items(item_id) ON DELETE CASCADE
             );
         ''')
-        
+
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_price_history_item_id ON price_history(item_id);')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_price_history_scraped_at ON price_history(scraped_at);')
-        
-        try:
-            cursor.execute('ALTER TABLE items ADD COLUMN cached_rating TEXT;')
-        except sqlite3.OperationalError:
-            pass
-            
-        try:
-            cursor.execute('ALTER TABLE items ADD COLUMN cached_profit REAL;')
-        except sqlite3.OperationalError:
-            pass
-            
-        try:
-            cursor.execute('ALTER TABLE items ADD COLUMN cached_margin REAL;')
-        except sqlite3.OperationalError:
-            pass
-            
+
+        cursor.execute('ALTER TABLE items ADD COLUMN IF NOT EXISTS cached_rating TEXT;')
+        cursor.execute('ALTER TABLE items ADD COLUMN IF NOT EXISTS cached_profit REAL;')
+        cursor.execute('ALTER TABLE items ADD COLUMN IF NOT EXISTS cached_margin REAL;')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_items_cached_rating ON items(cached_rating);')
-        
+
         conn.commit()
         logging.info("✅ Database tables initialized")
     except Exception as e:
@@ -120,14 +121,24 @@ def _init_tables_once(cursor, conn):
 
 class Database:
     """
-    Handles SQLite database interactions.
+    Handles PostgreSQL (Supabase) database interactions.
     Manages item data, inventory lists, and collection tracking.
+
+    Uses ThreadedConnectionPool for multi-session support (PC + phone).
     """
 
     def __init__(self):
         try:
-            self.conn = get_db_pool()
+            self.pool = get_db_pool()
+            self.conn = self.pool.getconn()
+
+            if self.conn.closed:
+                logging.warning("⚠️ Got closed connection from pool, getting new one...")
+                self.pool.putconn(self.conn)
+                self.conn = self.pool.getconn()
+
             self.cursor = self.conn.cursor()
+
         except Exception as e:
             logging.error(f"Database Connection Failed: {e}")
             st.error(f"Database Connection Failed: {e}")
@@ -135,13 +146,16 @@ class Database:
 
     def close(self):
         """
-        Closes the cursor. The shared connection remains open for other threads.
+        Closes the cursor and returns the connection to the pool.
+        The connection is NOT destroyed, just returned for reuse.
         """
         try:
             if hasattr(self, 'cursor') and self.cursor:
                 self.cursor.close()
+            if hasattr(self, 'conn') and hasattr(self, 'pool'):
+                self.pool.putconn(self.conn)
         except Exception as e:
-            logging.error(f"Error closing cursor: {e}")
+            logging.error(f"Error closing database: {e}")
 
     def save_item(self, item_id, data):
         if self._is_empty_scrape(data):
@@ -151,7 +165,7 @@ class Database:
 
         now = datetime.now().isoformat()
         json_str = json.dumps(data)
-        
+
         try:
             from pricing_engine import PriceAnalyzer
             analysis = PriceAnalyzer(data).analyze()
@@ -166,27 +180,27 @@ class Database:
             rating, profit, margin = "N/A", 0, 0
             price_new, price_used = 0, 0
             conf_new, conf_used = "N/A", "N/A"
-        
+
         try:
             query = '''
                 INSERT INTO items (item_id, json_data, updated_at, cached_rating, cached_profit, cached_margin)
-                VALUES (?, ?, ?, ?, ?, ?)
-                ON CONFLICT (item_id) 
-                DO UPDATE SET 
-                    json_data = excluded.json_data,
-                    updated_at = excluded.updated_at,
-                    cached_rating = excluded.cached_rating,
-                    cached_profit = excluded.cached_profit,
-                    cached_margin = excluded.cached_margin;
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ON CONFLICT (item_id)
+                DO UPDATE SET
+                    json_data = EXCLUDED.json_data,
+                    updated_at = EXCLUDED.updated_at,
+                    cached_rating = EXCLUDED.cached_rating,
+                    cached_profit = EXCLUDED.cached_profit,
+                    cached_margin = EXCLUDED.cached_margin;
             '''
             self.cursor.execute(query, (item_id, json_str, now, rating, profit, margin))
-            
+
             history_query = '''
                 INSERT INTO price_history (item_id, price_new, price_used, confidence_new, confidence_used, scraped_at)
-                VALUES (?, ?, ?, ?, ?, ?);
+                VALUES (%s, %s, %s, %s, %s, %s);
             '''
             self.cursor.execute(history_query, (item_id, price_new, price_used, conf_new, conf_used, now))
-            
+
             self.conn.commit()
         except Exception as e:
             self.conn.rollback()
@@ -194,7 +208,7 @@ class Database:
 
     def get_item(self, item_id):
         try:
-            self.cursor.execute('SELECT json_data, updated_at FROM items WHERE item_id = ?', (item_id,))
+            self.cursor.execute('SELECT json_data, updated_at FROM items WHERE item_id = %s', (item_id,))
             row = self.cursor.fetchone()
             if row:
                 data = json.loads(row[0])
@@ -212,11 +226,11 @@ class Database:
         try:
             query = '''
                 INSERT INTO inventory_lists (set_id, json_data, updated_at)
-                VALUES (?, ?, ?)
+                VALUES (%s, %s, %s)
                 ON CONFLICT (set_id)
                 DO UPDATE SET
-                    json_data = excluded.json_data,
-                    updated_at = excluded.updated_at;
+                    json_data = EXCLUDED.json_data,
+                    updated_at = EXCLUDED.updated_at;
             '''
             self.cursor.execute(query, (set_id, json_str, now))
             self.conn.commit()
@@ -226,7 +240,7 @@ class Database:
 
     def get_inventory(self, set_id):
         try:
-            self.cursor.execute('SELECT json_data, updated_at FROM inventory_lists WHERE set_id = ?', (set_id,))
+            self.cursor.execute('SELECT json_data, updated_at FROM inventory_lists WHERE set_id = %s', (set_id,))
             row = self.cursor.fetchone()
             if row:
                 return json.loads(row[0]), str(row[1])
@@ -238,7 +252,7 @@ class Database:
         try:
             query = '''
                 INSERT INTO collections (item_id, collection_name, added_at)
-                VALUES (?, ?, ?)
+                VALUES (%s, %s, %s)
                 ON CONFLICT (item_id, collection_name) DO NOTHING;
             '''
             self.cursor.execute(query, (item_id, collection_name, now))
@@ -249,7 +263,7 @@ class Database:
 
     def remove_from_collection(self, item_id, collection_name):
         try:
-            self.cursor.execute('DELETE FROM collections WHERE item_id = ? AND collection_name = ?', (item_id, collection_name))
+            self.cursor.execute('DELETE FROM collections WHERE item_id = %s AND collection_name = %s', (item_id, collection_name))
             self.conn.commit()
         except Exception as e:
             self.conn.rollback()
@@ -257,21 +271,21 @@ class Database:
 
     def get_collection_items(self, collection_name):
         try:
-            self.cursor.execute('SELECT item_id FROM collections WHERE collection_name = ?', (collection_name,))
+            self.cursor.execute('SELECT item_id FROM collections WHERE collection_name = %s', (collection_name,))
             return [row[0] for row in self.cursor.fetchall()]
         except: return []
 
     def get_stale_items(self, days_threshold=30):
         try:
             limit_date = (datetime.now() - timedelta(days=days_threshold)).isoformat()
-            self.cursor.execute('SELECT item_id FROM items WHERE updated_at < ?', (limit_date,))
+            self.cursor.execute('SELECT item_id FROM items WHERE updated_at < %s', (limit_date,))
             return [row[0] for row in self.cursor.fetchall()]
         except: return []
 
     def _is_empty_scrape(self, data):
         try:
             return (
-                not data.get("new", {}).get("sold") and 
+                not data.get("new", {}).get("sold") and
                 not data.get("new", {}).get("stock") and
                 not data.get("used", {}).get("sold") and
                 not data.get("used", {}).get("stock")
@@ -281,10 +295,8 @@ class Database:
 
     def get_items_by_prefix(self, prefix):
         try:
-            query = "SELECT json_data, updated_at FROM items WHERE item_id LIKE ?"
-            self.cursor.execute(query, (prefix + '%',))
+            self.cursor.execute("SELECT json_data, updated_at FROM items WHERE item_id LIKE %s", (prefix + '%',))
             rows = self.cursor.fetchall()
-            
             results = []
             for row in rows:
                 if row[0]:
@@ -296,38 +308,38 @@ class Database:
         except Exception as e:
             logging.error(f"Get Items By Prefix Failed: {e}")
             return []
-    
+
     def get_price_history(self, item_id, days=30):
         try:
             limit_date = (datetime.now() - timedelta(days=days)).isoformat()
             self.cursor.execute('''
                 SELECT price_new, price_used, confidence_new, confidence_used, scraped_at
                 FROM price_history
-                WHERE item_id = ? AND scraped_at > ?
+                WHERE item_id = %s AND scraped_at > %s
                 ORDER BY scraped_at DESC
             ''', (item_id, limit_date))
             return self.cursor.fetchall()
         except:
             return []
-    
+
     def get_price_trend(self, item_id):
         try:
             history = self.get_price_history(item_id, days=30)
             if len(history) < 2:
                 return None
-            
+
             latest = history[0]
             oldest = history[-1]
-            
+
             trend = {}
             if latest[0] and oldest[0]:
                 change = ((latest[0] - oldest[0]) / oldest[0]) * 100
                 trend['new_change_pct'] = round(change, 1)
-            
+
             if latest[1] and oldest[1]:
                 change = ((latest[1] - oldest[1]) / oldest[1]) * 100
                 trend['used_change_pct'] = round(change, 1)
-            
+
             return trend
         except:
             return None

@@ -168,11 +168,10 @@ def delete_from_db(item_id):
                     db.remove_from_collection(fig_id, "Ram's Collection")
                     db.remove_from_collection(fig_id, "Udi's Collection")
         
-        # SQLite uses ?
-        db.cursor.execute("DELETE FROM items WHERE item_id = ?", (item_id,))
+        db.cursor.execute("DELETE FROM items WHERE item_id = %s", (item_id,))
         deleted_items = db.cursor.rowcount
-        
-        db.cursor.execute("DELETE FROM inventory_lists WHERE set_id = ?", (item_id,))
+
+        db.cursor.execute("DELETE FROM inventory_lists WHERE set_id = %s", (item_id,))
         
         # Remove from collections (Ram's and Udi's) - Best effort
         db.remove_from_collection(item_id, "Ram's Collection") 
@@ -803,7 +802,7 @@ if st.session_state.user_role == "admin" and mode in ["🔐 Ram's Collection", "
                     db.add_to_collection(add_item_id, current_collection)
                     
                     # Get inventory and add minifigs
-                    db.cursor.execute("SELECT json_data FROM inventory_lists WHERE set_id = ?", (add_item_id,))
+                    db.cursor.execute("SELECT json_data FROM inventory_lists WHERE set_id = %s", (add_item_id,))
                     result = db.cursor.fetchone()
                     if result:
                         inv = json.loads(result[0])
@@ -1115,7 +1114,7 @@ if mode == "📊 Set Analyzer Database":
         db.cursor.execute("""
             SELECT item_id, cached_rating, cached_profit, cached_margin, updated_at
             FROM items
-            WHERE updated_at > ?
+            WHERE updated_at > %s
               AND cached_rating IN ('GREAT INVEST', 'EXCELLENT')
               AND cached_profit > 0
             ORDER BY cached_profit DESC
@@ -1174,20 +1173,6 @@ elif mode == "🔐 Ram's Collection":
         df_sets = df_sets[df_sets["ID"].str.lower().isin(_ram_ids)].copy()
     if not df_figs.empty:
         df_figs = df_figs[df_figs["ID"].str.lower().isin(_ram_ids)].copy()
-
-    # Debug diagnostics
-    with st.expander("🔍 Debug Info", expanded=(df_sets.empty and df_figs.empty)):
-        st.write(f"**Collection IDs in DB:** {len(_ram_ids)}")
-        st.write(f"**Total sets in items table (before filter):** {len(load_data(cache_key)[0])}")
-        st.write(f"**Total figs in items table (before filter):** {len(load_data(cache_key)[1])}")
-        st.write(f"**Sets after collection filter:** {len(df_sets)}")
-        st.write(f"**Figs after collection filter:** {len(df_figs)}")
-        if _ram_ids:
-            sample = list(_ram_ids)[:5]
-            st.write(f"**Sample collection IDs:** {sample}")
-        _raw_sets, _raw_figs = load_data(cache_key)
-        if not _raw_sets.empty:
-            st.write(f"**Sample item IDs in DB:** {list(_raw_sets['ID'].head(5))}")
 
     # Check if collection is empty
     if df_sets.empty and df_figs.empty:
