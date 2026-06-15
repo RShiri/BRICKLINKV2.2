@@ -1160,20 +1160,24 @@ if mode == "📊 Set Analyzer Database":
 elif mode == "🔐 Ram's Collection":
     st.title("🔐 Ram's Collection")
     st.caption("Personal investment portfolio")
-    
-    # Load data filtered to Ram's Collection only
+
+    # Fetch collection membership FRESH from DB (bypasses load_data cache)
+    _ram_db = Database()
+    _ram_ids = set(i.lower() for i in _ram_db.get_collection_items("Ram's Collection"))
+    _ram_db.close()
+
     cache_key = get_latest_update_timestamp()
     df_sets, df_figs = load_data(cache_key)
-    
-    # Filter to Ram's Collection
+
+    # Filter using fresh IDs (not the cached InCollection column)
     if not df_sets.empty:
-        df_sets = df_sets[df_sets["InCollection"] == True]
+        df_sets = df_sets[df_sets["ID"].str.lower().isin(_ram_ids)].copy()
     if not df_figs.empty:
-        df_figs = df_figs[df_figs["InCollection"] == True]
-    
+        df_figs = df_figs[df_figs["ID"].str.lower().isin(_ram_ids)].copy()
+
     # Check if collection is empty
     if df_sets.empty and df_figs.empty:
-        st.warning("📭 Ram's Collection is empty")
+        st.warning(f"📭 Ram's Collection is empty (DB has {len(_ram_ids)} IDs — items may not be scraped yet)")
         st.info("💡 Tip: Use the Set Analyzer to scan items, then they'll be automatically added to your collection")
         st.stop()
     
@@ -1237,98 +1241,37 @@ elif mode == "🔐 Ram's Collection":
         if not df_sets.empty:
             df_new = df_sets[df_sets["New Price"] > 0].sort_values("Profit", ascending=False).copy()
 
-            if st.session_state.user_role == "admin":
-                # Admin View (Select to Remove from Collection)
-                df_new["Select"] = False
-
-                edited_new = st.data_editor(
-                    df_new,
-                    use_container_width=True,
-                    column_order=["Select", "Stale", "Image", "ID", "Name", "New Price", "New Conf", "Used Price", "Profit", "Margin %", "Rating"],
-                    hide_index=True,
-                    column_config={
-                        "Select": st.column_config.CheckboxColumn("🗑️", width="small", help="Select to remove from collection"),
-                        "Image": st.column_config.ImageColumn("Img", width="small"),
-                        "New Price": st.column_config.NumberColumn("New Price", format="%.2f ₪"),
-                        "Used Price": st.column_config.NumberColumn("Used Price", format="%.2f ₪"),
-                        "Profit": st.column_config.NumberColumn("Profit", format="%.2f ₪"),
-                        "Margin %": st.column_config.ProgressColumn("Margin", format="%.0f%%", min_value=-50, max_value=100)
-                    },
-                    disabled=[c for c in df_new.columns if c != "Select"],
-                    key="editor_ram_tab1"
-                )
-
-                selected_tab1 = edited_new[edited_new["Select"]]
-                if not selected_tab1.empty:
-                    st.warning(f"🗑️ {len(selected_tab1)} items selected for removal")
-                    if st.button("Remove from Collection", key="btn_del_tab1"):
-                        for item_id in selected_tab1["ID"]:
-                            remove_from_collection(item_id, "Ram's Collection")
-                        st.cache_data.clear()
-                        time.sleep(0.5)
-                        st.rerun()
-            else:
-                # User View
-                st.dataframe(
-                    df_new,
-                    width=None,
-                    column_order=["Stale", "Image", "ID", "Name", "New Price", "New Conf", "Used Price", "Profit", "Margin %", "Rating"],
-                    hide_index=True,
-                    column_config={
-                        "Image": st.column_config.ImageColumn("Img", width="small"),
-                        "New Price": st.column_config.NumberColumn("New Price", format="%.2f ₪"),
-                        "Used Price": st.column_config.NumberColumn("Used Price", format="%.2f ₪"),
-                        "Profit": st.column_config.NumberColumn("Profit", format="%.2f ₪"),
-                        "Margin %": st.column_config.ProgressColumn("Margin", format="%.0f%%", min_value=-50, max_value=100)
-                    }
-                )
+            st.dataframe(
+                df_new,
+                use_container_width=True,
+                column_order=["Stale", "Image", "ID", "Name", "New Price", "New Conf", "Used Price", "Profit", "Margin %", "Rating"],
+                hide_index=True,
+                column_config={
+                    "Image": st.column_config.ImageColumn("Img", width="small"),
+                    "New Price": st.column_config.NumberColumn("New Price", format="%.2f ₪"),
+                    "Used Price": st.column_config.NumberColumn("Used Price", format="%.2f ₪"),
+                    "Profit": st.column_config.NumberColumn("Profit", format="%.2f ₪"),
+                    "Margin %": st.column_config.ProgressColumn("Margin", format="%.0f%%", min_value=-50, max_value=100)
+                }
+            )
 
     with tab2:
         st.caption("Undervalued Used Sets (High Minifig Value)")
         if not df_sets.empty:
             df_used = df_sets[df_sets["Used Price"] > 0].sort_values("Figs %", ascending=False).copy()
-            # Determine safe column order (Total Figs Value may not exist)
-            partout_cols_base = ["Stale", "Image", "ID", "Name", "Part-Out Alert", "Used Price", "Used Conf", "Figs %"]
-            if st.session_state.user_role == "admin":
-                df_used["Select"] = False
-
-                edited_used = st.data_editor(
-                    df_used,
-                    use_container_width=True,
-                    column_order=["Select"] + partout_cols_base,
-                    hide_index=True,
-                    column_config={
-                        "Select": st.column_config.CheckboxColumn("🗑️", width="small", help="Select to remove from collection"),
-                        "Image": st.column_config.ImageColumn("Img", width="small"),
-                        "Part-Out Alert": st.column_config.TextColumn("Alert"),
-                        "Used Price": st.column_config.NumberColumn("Used Price", format="%.2f ₪"),
-                        "Figs %": st.column_config.ProgressColumn("Figs Value %", format="%.0f%%", min_value=0, max_value=200)
-                    },
-                    disabled=[c for c in df_used.columns if c != "Select"],
-                    key="editor_ram_tab2"
-                )
-
-                selected_tab2 = edited_used[edited_used["Select"]]
-                if not selected_tab2.empty:
-                    st.warning(f"🗑️ {len(selected_tab2)} items selected for removal")
-                    if st.button("Remove from Collection", key="btn_del_tab2"):
-                        for item_id in selected_tab2["ID"]:
-                            remove_from_collection(item_id, "Ram's Collection")
-                        st.cache_data.clear()
-                        time.sleep(0.5)
-                        st.rerun()
-            else:
-                st.dataframe(
-                    df_used,
-                    width=None,
-                    column_order=partout_cols_base,
-                    hide_index=True,
-                    column_config={
-                        "Image": st.column_config.ImageColumn("Img", width="small"),
-                        "Part-Out Alert": st.column_config.TextColumn("Alert"),
-                        "Figs %": st.column_config.ProgressColumn("Figs %", format="%.0f%%", min_value=0, max_value=150)
-                    }
-                )
+            partout_cols = ["Stale", "Image", "ID", "Name", "Part-Out Alert", "Used Price", "Used Conf", "Figs %"]
+            st.dataframe(
+                df_used,
+                use_container_width=True,
+                column_order=partout_cols,
+                hide_index=True,
+                column_config={
+                    "Image": st.column_config.ImageColumn("Img", width="small"),
+                    "Part-Out Alert": st.column_config.TextColumn("Alert"),
+                    "Used Price": st.column_config.NumberColumn("Used Price", format="%.2f ₪"),
+                    "Figs %": st.column_config.ProgressColumn("Figs %", format="%.0f%%", min_value=0, max_value=200)
+                }
+            )
 
     with tab3:
         st.dataframe(df_sets, width="stretch", hide_index=True, column_config={"Image": st.column_config.ImageColumn()})
@@ -1347,35 +1290,46 @@ elif mode == "🔐 Ram's Collection":
             
         st.dataframe(df_figs, width="stretch", hide_index=True, column_config={"Image": st.column_config.ImageColumn()})
 
-    st.sidebar.subheader("Actions")
-    del_id = st.sidebar.text_input("Remove Item ID(s)", key="delete_rams_input", help="Enter single ID or space-separated IDs (e.g. 75001 sh0232)")
-    if st.sidebar.button("🗑️ Remove from Collection", key="delete_rams"):
+    if st.session_state.user_role == "admin":
+        st.sidebar.subheader("🗑️ Remove from Collection")
+        del_id = st.sidebar.text_input(
+            "Item ID(s) to remove",
+            key="delete_rams_input",
+            placeholder="e.g. 75001 or sh0232",
+            help="Space or comma-separated. Removes from collection only — item stays in database."
+        )
         if del_id:
             ids_to_remove = [i.strip() for i in del_id.replace(',', ' ').split() if i.strip()]
-            for item_id in ids_to_remove:
-                remove_from_collection(item_id, "Ram's Collection")
-            st.cache_data.clear()
-            time.sleep(0.5)
-            st.rerun()
+            st.sidebar.caption(f"Will remove {len(ids_to_remove)} item(s): {', '.join(ids_to_remove[:5])}{'…' if len(ids_to_remove) > 5 else ''}")
+            if st.sidebar.button("✅ Confirm Remove", key="delete_rams", type="primary"):
+                for item_id in ids_to_remove:
+                    remove_from_collection(item_id, "Ram's Collection")
+                st.cache_data.clear()
+                time.sleep(0.5)
+                st.rerun()
 
 
 elif mode == "🔐 Udi's Collection":
     st.title("🔐 Udi's Collection")
     st.caption("Personal investment portfolio")
-    
-    # Load data filtered to Udi's Collection only
+
+    # Fetch collection membership FRESH from DB (bypasses load_data cache)
+    _udi_db = Database()
+    _udi_ids = set(i.lower() for i in _udi_db.get_collection_items("Udi's Collection"))
+    _udi_db.close()
+
     cache_key = get_latest_update_timestamp()
     df_sets, df_figs = load_data(cache_key)
-    
-    # Filter to Udi's Collection
+
+    # Filter using fresh IDs
     if not df_sets.empty:
-        df_sets = df_sets[df_sets["InUdiCollection"] == True]
+        df_sets = df_sets[df_sets["ID"].str.lower().isin(_udi_ids)].copy()
     if not df_figs.empty:
-        df_figs = df_figs[df_figs["InUdiCollection"] == True]
-    
+        df_figs = df_figs[df_figs["ID"].str.lower().isin(_udi_ids)].copy()
+
     # Check if collection is empty
     if df_sets.empty and df_figs.empty:
-        st.warning("📭 Udi's Collection is empty")
+        st.warning(f"📭 Udi's Collection is empty (DB has {len(_udi_ids)} IDs — items may not be scraped yet)")
         st.info("💡 Tip: Use the Set Analyzer to scan items and add them to Udi's collection")
         st.stop()
     
@@ -1430,7 +1384,7 @@ elif mode == "🔐 Udi's Collection":
             st.dataframe(
                 df_used,
                 width="stretch",
-                column_order=["Stale", "Image", "ID", "Part-Out Alert", "Used Price", "Used Conf", "Total Figs Value", "Figs %"],
+                column_order=["Stale", "Image", "ID", "Name", "Part-Out Alert", "Used Price", "Used Conf", "Figs %"],
                 hide_index=True,
                 column_config={
                     "Image": st.column_config.ImageColumn("Img", width="small"),
@@ -1456,16 +1410,23 @@ elif mode == "🔐 Udi's Collection":
             
         st.dataframe(df_figs, width="stretch", hide_index=True, column_config={"Image": st.column_config.ImageColumn()})
 
-    st.sidebar.subheader("Actions")
-    del_id = st.sidebar.text_input("Remove Item ID(s)", key="udi_delete_input", help="Enter single ID or space-separated IDs")
-    if st.sidebar.button("🗑️ Remove from Collection", key="delete_udis"):
+    if st.session_state.user_role == "admin":
+        st.sidebar.subheader("🗑️ Remove from Collection")
+        del_id = st.sidebar.text_input(
+            "Item ID(s) to remove",
+            key="udi_delete_input",
+            placeholder="e.g. 75001 or sh0232",
+            help="Space or comma-separated. Removes from collection only — item stays in database."
+        )
         if del_id:
             ids_to_remove = [i.strip() for i in del_id.replace(',', ' ').split() if i.strip()]
-            for item_id in ids_to_remove:
-                remove_from_collection(item_id, "Udi's Collection")
-            st.cache_data.clear()
-            time.sleep(0.5)
-            st.rerun()
+            st.sidebar.caption(f"Will remove {len(ids_to_remove)} item(s): {', '.join(ids_to_remove[:5])}{'…' if len(ids_to_remove) > 5 else ''}")
+            if st.sidebar.button("✅ Confirm Remove", key="delete_udis", type="primary"):
+                for item_id in ids_to_remove:
+                    remove_from_collection(item_id, "Udi's Collection")
+                st.cache_data.clear()
+                time.sleep(0.5)
+                st.rerun()
 
 
 
