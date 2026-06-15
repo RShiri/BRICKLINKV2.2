@@ -1,304 +1,222 @@
-# 🎯 BrickLink Sniper Dashboard
+# 🧱 BrickLink Sniper V1.4
 
-> **Professional LEGO Investment Analysis & Portfolio Management Platform**
-
-A high-performance Streamlit application designed for serious LEGO investors to analyze market trends, track collections, and identify profitable investment opportunities on BrickLink.
-
-[![Streamlit](https://img.shields.io/badge/Streamlit-FF4B4B?style=for-the-badge&logo=Streamlit&logoColor=white)](https://streamlit.io/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-316192?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
-[![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+> **Professional LEGO Investment Analysis & Portfolio Management Platform**  
+> Built with Python + Streamlit | Powered by real-time BrickLink market data
 
 ---
 
-## 🚀 What Makes This Special
+## Overview
 
-This isn't just another web scraper. BrickLink Sniper is built with **enterprise-grade architecture** and **cutting-edge performance optimizations** to handle real-time market analysis at scale.
-
-### 💎 The "Secret Sauce" - Technical Innovations
-
-#### 1. **Multi-Session Connection Pooling** 🔄
-**Problem**: Traditional single-connection approaches fail when users access from multiple devices (PC + phone) simultaneously.
-
-**Our Solution**:
-```python
-@st.cache_resource
-def get_db_pool():
-    return pool.ThreadedConnectionPool(
-        minconn=2, maxconn=10,
-        host=..., dbname=...
-    )
-```
-
-- Uses `psycopg2.pool.ThreadedConnectionPool` with 2-10 connections
-- Thread-safe concurrent access from multiple sessions
-- Automatic connection health checks and recovery
-- **Result**: Zero conflicts, seamless multi-device usage
-
-#### 2. **Optimized Data Loading** ⚡
-**Problem**: Loading 1000+ items took 15-30 seconds due to expensive JSON parsing and analysis loops.
-
-**Our Solution**:
-```python
-# Pre-calculate and cache analysis results in SQL columns
-db.cursor.execute("""
-    SELECT item_id, cached_rating, cached_profit, cached_margin, 
-           json_data, updated_at
-    FROM items
-""")
-```
-
-- Pre-computed columns (`cached_rating`, `cached_profit`, `cached_margin`)
-- Direct SQL reads instead of JSON parsing + PriceAnalyzer loops
-- Minimal JSON parsing only for display metadata
-- **Result**: 15x faster load times (15-30s → <2s for 1000 items)
-
-#### 3. **Parallel Batch Scraping** 🔥
-**Problem**: Sequential scraping of 10 items took 60+ seconds.
-
-**Our Solution**:
-```python
-with ThreadPoolExecutor(max_workers=5) as executor:
-    futures = {
-        executor.submit(process_single_item, item_id): item_id
-        for item_id in batch_ids
-    }
-    for future in as_completed(futures):
-        # Real-time ETA calculation
-        est_time_left = avg_time * remaining_items
-```
-
-- 5 concurrent scraping workers using `ThreadPoolExecutor`
-- Real-time ETA display with time remaining and speed metrics
-- Thread-safe database operations
-- **Result**: 5x faster batch processing (60s → 12s for 10 items)
-
-#### 4. **Smart Cache Invalidation** 🧠
-**Problem**: Fixed TTL caching caused unnecessary reloads or stale data.
-
-**Our Solution**:
-```python
-def get_latest_update_timestamp():
-    db.cursor.execute("SELECT MAX(updated_at) FROM items")
-    return latest.isoformat()
-
-@st.cache_data(ttl=300)
-def load_data(_cache_key):  # Timestamp-based invalidation
-    # ... load data
-```
-
-- Timestamp-based cache keys instead of fixed TTL
-- Cache invalidates only when data actually changes
-- 5-minute TTL as safety fallback
-- **Result**: 90% cache hit rate (vs 10% with fixed TTL)
+BrickLink Sniper is a web application that helps LEGO collectors and investors make data-driven buy/sell decisions. It scrapes live pricing data from BrickLink, applies statistical filtering to compute fair market values, identifies profitable "sniper" deals, and tracks personal collections — all through an interactive Streamlit dashboard.
 
 ---
 
-## 📁 Project Structure
+## Features
+
+| Feature | Description |
+|---|---|
+| **Set Analyzer** | Real-time scraping and analysis for any LEGO set or minifigure by ID |
+| **Batch Processing** | Analyze up to dozens of items at once (sequential ≤5, parallel >5) |
+| **Minifigure Breakdown** | Automatically fetches the minifig inventory of any set and prices each figure |
+| **Part-Out Strategist** | Detects sets where minifig value exceeds 80% of the used set price |
+| **Investment Hub** | Ranks portfolio items by profit potential and margin |
+| **Sniper War Room** | Live dashboard of the highest-profit items updated in the last 24 hours |
+| **Personal Collections** | Track Ram's and Udi's collections with full portfolio metrics |
+| **Price History** | Logs every scrape to a `price_history` table for trend analysis |
+| **Smart Cache** | 30-minute in-memory cache per item + 5-minute data cache to minimize scraping |
+| **Role-Based Access** | User mode (read-only) and Admin mode (edit, delete, collection management) |
+| **Mobile Responsive** | CSS media queries for a usable phone experience |
+
+---
+
+## Architecture
 
 ```
-BrickLinkV2.2/
-├── dashboard.py              # Main Streamlit app & UI logic
-├── database.py               # PostgreSQL connection pool & data layer
-├── scraper.py                # BrickLink web scraping engine
-├── pricing_engine.py         # Market analysis & pricing algorithms
-├── backfill_cached_columns.py # Pre-computation script for cached columns
-├── scan_all_minifigs.py      # Universal theme scanner (15+ themes)
-├── scan_catalog.py           # BrickLink catalog tree crawler
-├── scan_superheroes.py       # Autonomous Marvel/DC minifig scanner
+BrickLink Sniper
+├── dashboard.py          # Main Streamlit app — UI, routing, analysis orchestration
+├── database.py           # SQLite layer with connection pooling and schema management
+├── scraper.py            # Selenium/BeautifulSoup scraper for BrickLink price data
+├── pricing_engine.py     # Statistical price analysis, outlier filtering, sniper scoring
+├── currency_converter.py # Exchange rate utilities (USD → ILS)
 ├── pages/
-│   ├── 1_🦸_Marvel.py        # Marvel superhero minifig database
-│   └── 2_🦇_DC.py            # DC superhero minifig database
-├── .streamlit/
-│   └── secrets.toml          # Database credentials (not in repo)
-└── requirements.txt          # Python dependencies
+│   ├── 1_🦸_Marvel.py   # Marvel superhero minifigure browser
+│   └── 2_🦇_DC.py       # DC superhero minifigure browser
+└── scripts/              # One-off utility scripts (catalog scanning, backfilling, etc.)
 ```
 
-### Core Files Explained
+### Data Flow
 
-| File | Responsibility |
-|------|---------------|
-| **`dashboard.py`** | Streamlit UI, user interactions, parallel batch processing, data visualization |
-| **`database.py`** | ThreadedConnectionPool management, CRUD operations, connection health checks |
-| **`scraper.py`** | BrickLink HTML parsing, data extraction, anti-bot measures |
-| **`pricing_engine.py`** | Market price analysis, profit calculations, investment ratings |
-| **`backfill_cached_columns.py`** | One-time script to populate cached columns for existing data |
+```
+User Input (Set ID)
+      │
+      ▼
+Database Cache Check ──► Cached & Fresh? ──► Return cached data
+      │
+      ▼ (stale or missing)
+BrickLinkScraper (Selenium + BeautifulSoup)
+      │   scrapes sold history + current stock
+      ▼
+PriceAnalyzer
+      │   filters incomplete listings (blacklist + regex)
+      │   removes statistical outliers (IQR method)
+      │   computes market price, sniper opportunity, lifecycle status
+      ▼
+Database.save_item()
+      │   stores JSON data + cached_rating, cached_profit, cached_margin columns
+      │   appends a row to price_history
+      ▼
+Dashboard renders report, minifig gallery, investment metrics
+```
 
 ---
 
-## 🛠️ Setup & Installation
+## Database Schema
 
-### Prerequisites
-- Python 3.8+
-- PostgreSQL database (Supabase recommended)
-- BrickLink account (for manual verification if needed)
+### `items`
+| Column | Type | Description |
+|---|---|---|
+| `item_id` | TEXT PK | BrickLink set/minifig ID (e.g., `75001`, `sh0232`) |
+| `json_data` | TEXT | Full scraped data as JSON |
+| `updated_at` | DATETIME | Last scrape timestamp |
+| `cached_rating` | TEXT | Pre-computed investment rating (`EXCELLENT`, `GREAT INVEST`, etc.) |
+| `cached_profit` | REAL | Pre-computed absolute profit in ILS |
+| `cached_margin` | REAL | Pre-computed margin percentage |
 
-### 1. Clone the Repository
-```bash
-git clone https://github.com/RShiri/BRICKLINKV2.2.git
-cd BRICKLINKV2.2
+### `inventory_lists`
+| Column | Type | Description |
+|---|---|---|
+| `set_id` | TEXT PK | Parent set ID |
+| `json_data` | TEXT | JSON array of minifigures with `id`, `name`, `qty` |
+| `updated_at` | DATETIME | Last fetch timestamp |
+
+### `collections`
+| Column | Type | Description |
+|---|---|---|
+| `item_id` | TEXT | Set or minifig ID |
+| `collection_name` | TEXT | e.g., `"Ram's Collection"` |
+| `added_at` | DATETIME | When added |
+
+### `price_history`
+| Column | Type | Description |
+|---|---|---|
+| `id` | INTEGER PK | Auto-increment |
+| `item_id` | TEXT | References `items.item_id` |
+| `price_new` | REAL | Market price (new) at scrape time |
+| `price_used` | REAL | Market price (used) at scrape time |
+| `confidence_new/used` | TEXT | `HIGH` / `MEDIUM` / `LOW` / `NO DATA` |
+| `scraped_at` | DATETIME | Scrape timestamp |
+
+---
+
+## Pricing Engine
+
+`PriceAnalyzer` applies a multi-layer filtering pipeline before computing any price:
+
+1. **Completeness filter** — removes listings flagged as incomplete via a keyword blacklist and regex patterns (e.g., "no minifigs", "build only", "missing parts").
+2. **Bulk seller filter** — excludes sellers listing 3+ identical items (likely dealers, not representative market).
+3. **IQR outlier removal** — drops prices outside `[Q1 - 1.5×IQR, Q3 + 1.5×IQR]`.
+4. **Market price** — weighted mean of remaining sold prices.
+
+**Sniper Opportunity scoring:**
+```
+Profit  = Market Price - (Cheapest Listing × 1.13)   # 1.13 = BrickLink fees
+Margin% = (Profit / Cheapest Listing) × 100
+
+Rating:
+  EXCELLENT    → Margin ≥ 20%
+  GREAT INVEST → Margin ≥ 15%
+  GOOD         → Margin ≥ 10%
+  IRRELEVANT   → Margin < 10%
 ```
 
-### 2. Install Dependencies
+**Confidence levels** are based on the number of filtered sales:
+- `HIGH` — 10+ sales
+- `MEDIUM` — 5–9 sales
+- `LOW` — 1–4 sales
+- `NO DATA` — 0 sales
+
+---
+
+## Setup & Running
+
+### Requirements
+```
+Python 3.10+
+Google Chrome (for Selenium scraping)
+ChromeDriver (matching your Chrome version)
+```
+
+### Install dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3. Configure Database Secrets
-Create `.streamlit/secrets.toml`:
-```toml
-[supabase]
-host = "your-project.supabase.co"
-port = "5432"
-dbname = "postgres"
-user = "postgres"
-password = "your-password"
-```
-
-### 4. Initialize Database & Cached Columns
-```bash
-# First run will create tables automatically
-streamlit run dashboard.py
-
-# Then populate cached columns for existing data
-python backfill_cached_columns.py
-```
-
-### 5. Launch the Dashboard
+### Run the app
 ```bash
 streamlit run dashboard.py
 ```
 
-Navigate to `http://localhost:8501` 🎉
+The app will be available at `http://localhost:8501`.
+
+### First-time use
+The SQLite database (`bricklink_data.db`) is created automatically on first run. No manual schema setup needed.
 
 ---
 
-## 🎯 Key Features
+## Usage Guide
 
-### 📊 Set Analyzer
-- Real-time BrickLink scraping
-- Deep scan mode for zero-price items
-- Batch processing with parallel execution
-- Minifigure part-out analysis
+### Set Analyzer
+1. Navigate to **Set Analyzer** in the sidebar.
+2. Enter one or more IDs in the chat input:
+   - `75001` — single LEGO set
+   - `sh0232` — single minifigure
+   - `75001 75002 sh0232` — batch (space-separated)
+   - `75001 force` — force re-scrape, ignore cache
+3. Results include: market price (new + used), confidence, investment rating, profit potential, and a minifigure gallery with individual prices.
 
-### 💼 Portfolio Manager
-- Track your LEGO collection
-- Investment profit calculations
-- Part-out opportunity detection
-- Stale data alerts (>30 days)
+### Set Analyzer Database
+Browse the full database of all scraped sets and minifigures with sorting, filtering, and the **Sniper War Room** hot deals section (deals with `GREAT INVEST` or `EXCELLENT` rating updated in the last 24h).
 
-### 🦸 Superhero Databases
-- Marvel & DC minifigure catalogs
-- Big figure identification
-- Price tracking and trends
-- Automated scanning tools
+### Collections (Admin only)
+- **Ram's Collection / Udi's Collection**: Personal portfolio views with tabs for Investment Hub, Part-Out Strategist, All Items, and Minifigures.
+- Add items via the sidebar input. Sets automatically pull in their minifigures.
+- Delete items individually or in bulk via checkbox selection or sidebar text input.
 
-### 📈 Sniper War Room
-- High-profit opportunities (S+ rated items)
-- Investment recommendations
-- Market lifecycle analysis
-- Real-time filtering and sorting
-
-### 🕷️ Autonomous Data Mining Agents
-The project includes standalone CLI scripts for mass-data collection:
-
-- **`scan_superheroes.py`**: Smart scraper that iterates through `sh0001`-`sh9999`, detects gaps, and builds a complete Marvel/DC database.
-- **`scan_catalog.py`**: A crawler that maps the entire BrickLink category tree to discover new themes automatically.
-- **`scan_all_minifigs.py`**: Universal scanner handling 15+ themes (Star Wars, Harry Potter, Ninjago) with smart gap detection.
-
-*Run them in the background to feed the dashboard with fresh market data.*
-
-**Usage Example:**
-```bash
-# Scan all superhero minifigs (sh0001-sh9999)
-python scan_superheroes.py
-
-# Discover new LEGO themes from BrickLink catalog
-python scan_catalog.py
-
-# Scan specific theme ranges
-python scan_all_minifigs.py
-```
-
-### 🔐 Role-Based Access Control
-- **User Mode**: Read-only access to market analysis and public databases.
-- **Admin Mode**: Password-protected area (`7399`) with write privileges:
-  - Delete items from database
-  - Manage specific portfolios (Ram's Collection / Udi's Collection)
-  - Access to raw data editor
-  - Force re-scrape capabilities
-
-### 📱 Mobile-First Design
-Custom CSS injection ensures the dashboard is fully responsive on smartphones, optimized for checking prices while hunting in physical stores. The interface adapts seamlessly to small screens with touch-friendly controls.
+### Access Levels
+| Mode | Capabilities |
+|---|---|
+| **User** | View all data, run analysis, browse database |
+| **Admin** | + Delete items, manage collections, import CSV |
 
 ---
 
-## 🔧 Performance Benchmarks
+## Marvel & DC Pages
 
-| Metric | Before | After | Improvement |
-|--------|--------|-------|-------------|
-| Database connections/session | 50+ | 2-10 (pooled) | **50x reduction** |
-| Load 1000 items | 15-30s | <2s | **15x faster** |
-| Batch scrape 10 items | 60s | 12s | **5x faster** |
-| Cache hit rate | ~10% | ~90% | **9x improvement** |
-| Multi-device support | ❌ Conflicts | ✅ Seamless | **100% reliable** |
+The `pages/` directory contains superhero-specific minifigure browsers (`1_🦸_Marvel.py`, `2_🦇_DC.py`) that filter the database to show only Marvel/DC minifigures with their current market prices — useful for tracking superhero minifig investments separately.
 
 ---
 
-## 🏗️ Architecture Highlights
+## Key Files Reference
 
-### Database Schema
-```sql
--- Items table with cached analysis columns
-CREATE TABLE items (
-    item_id TEXT PRIMARY KEY,
-    json_data TEXT,
-    updated_at TIMESTAMPTZ,
-    cached_rating TEXT,      -- Pre-calculated investment rating
-    cached_profit REAL,      -- Pre-calculated profit potential
-    cached_margin REAL       -- Pre-calculated margin percentage
-);
-
--- Collections for portfolio tracking
-CREATE TABLE collections (
-    item_id TEXT,
-    collection_name TEXT,
-    added_at TIMESTAMPTZ,
-    PRIMARY KEY (item_id, collection_name)
-);
-```
-
-### Connection Pool Flow
-```
-User Request (PC) ──┐
-                    ├──> ThreadedConnectionPool (2-10 connections)
-User Request (Phone)┘         │
-                              ├──> Connection 1 → Database
-                              ├──> Connection 2 → Database
-                              └──> Connection 3 → Database
-```
+| File | Purpose |
+|---|---|
+| `dashboard.py` | App entry point, all UI logic |
+| `database.py` | `Database` class + SQLite connection pool |
+| `scraper.py` | `BrickLinkScraper` — Selenium driver + HTML parsing |
+| `pricing_engine.py` | `PriceAnalyzer` — statistical price calculation |
+| `currency_converter.py` | USD → ILS conversion |
+| `pages/1_🦸_Marvel.py` | Marvel minifig browser |
+| `pages/2_🦇_DC.py` | DC minifig browser |
+| `bricklink_data.db` | SQLite database (auto-created) |
+| `logs/system.log` | App logs |
 
 ---
 
-## 🤝 Contributing
+## Author
 
-This is a personal investment tool, but suggestions and bug reports are welcome! Feel free to open an issue.
-
----
-
-## 📝 License
-
-Private project - All rights reserved.
+**Ram Shiri** — Data Engineering Student  
+[LinkedIn](https://www.linkedin.com/in/ram-shiri-1a1056304/)
 
 ---
 
-## 🙏 Acknowledgments
-
-- **BrickLink** for the marketplace data
-- **Streamlit** for the amazing framework
-- **Supabase** for reliable PostgreSQL hosting
-
----
-
-**Built with ❤️ by Ram Shiri**
-
-*For questions or collaboration: [GitHub](https://github.com/RShiri)*
+*BrickLink Sniper is an independent tool and is not affiliated with or endorsed by BrickLink or the LEGO Group.*

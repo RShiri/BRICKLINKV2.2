@@ -91,120 +91,16 @@ def render_readme_page():
     except Exception as e:
         st.error(f"Error loading README: {e}")
 
-# --- ROLE SELECTION & AUTHENTICATION ---
-# Initialize session state
-if "user_role" not in st.session_state:
-    st.session_state.user_role = None
-if "admin_authenticated" not in st.session_state:
-    st.session_state.admin_authenticated = False
-if "show_about_me" not in st.session_state:
-    st.session_state.show_about_me = False
-if "show_readme" not in st.session_state:
-    st.session_state.show_readme = False
-
-# Role selection page
-if st.session_state.user_role is None:
-    st.title("🧱 BrickLink Sniper V1.4")
-    st.markdown("### Welcome! Please select your access level:")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("#### 👤 User Mode")
-        st.caption("Public access to analysis tools and database")
-        if st.button("🚀 Enter as User", use_container_width=True):
-            st.session_state.user_role = "user"
-            st.rerun()
-    
-    with col2:
-        st.markdown("#### 🔐 Admin Mode")
-        st.caption("Full access including personal collections")
-        if st.button("🔑 Enter as Admin", use_container_width=True):
-            st.session_state.user_role = "admin"
-            st.rerun()
-    
-    st.divider()
-    
-    # Feature Showcase Section
-    st.markdown("## 🎯 BrickLink Sniper Dashboard")
-    st.markdown("### *Professional LEGO Investment Analysis & Portfolio Management Platform*")
-    st.markdown("")
-    
-    # Feature highlights with icons and descriptions
-    features = [
-        {
-            "icon": "⚡",
-            "title": "Enterprise-Grade Performance",
-            "description": "Built with cutting-edge optimizations delivering **15x faster** data loading (<2s for 1000 items) and **5x faster** batch processing. Never miss a market move with real-time analysis powered by parallel execution and smart caching."
-        },
-        {
-            "icon": "📱",
-            "title": "Seamless Multi-Device Experience",
-            "description": "Engineered with **Multi-Session Connection Pooling**, enabling conflict-free simultaneous access from PC and smartphone. Check prices on the go without database errors or session conflicts."
-        },
-        {
-            "icon": "🎯",
-            "title": "Advanced Investment Tools",
-            "description": "Comprehensive suite including **Set Analyzer** for real-time scraping, **Portfolio Manager** for tracking growth, and **Sniper War Room** highlighting high-profit S+ rated opportunities instantly."
-        },
-        {
-            "icon": "🕷️",
-            "title": "Autonomous Data Mining",
-            "description": "Powered by background agents that continuously map the BrickLink catalog and detect price changes. Autonomous scanners keep your database populated with fresh market insights 24/7."
-        },
-        {
-            "icon": "🔐",
-            "title": "Smart & Secure Architecture",
-            "description": "Utilizes **Smart Cache Invalidation** (90% hit rate) to prevent stale data and includes **Role-Based Access Control** to secure your personal collection data and management tools."
-        }
-    ]
-    
-    for feature in features:
-        st.markdown(f"**{feature['icon']} {feature['title']}**")
-        st.markdown(f"{feature['description']}")
-        st.markdown("")
-    
-    st.divider()
-    render_about_me_content()
-    
-    st.stop()
-
-# Admin authentication
-if st.session_state.user_role == "admin" and not st.session_state.admin_authenticated:
-    st.title("🔐 Admin Authentication")
-    
-    password = st.text_input("Enter Admin Password", type="password", key="admin_password")
-    
-    col1, col2 = st.columns([1, 3])
-    with col1:
-        if st.button("🔓 Unlock"):
-            if password == "7399":
-                st.session_state.admin_authenticated = True
-                st.success("✅ Access granted!")
-                time.sleep(0.5)
-                st.rerun()
-            else:
-                st.error("❌ Incorrect password")
-    
-    with col2:
-        if st.button("← Back to Role Selection"):
-            st.session_state.user_role = None
-            st.rerun()
-    
-    st.stop()
-
-# Display current mode in sidebar
-st.sidebar.markdown(f"**Mode:** {'🔐 Admin' if st.session_state.user_role == 'admin' else '👤 User'}")
-if st.sidebar.button("🔄 Switch Mode"):
-    st.session_state.user_role = None
-    st.session_state.admin_authenticated = False
-    st.session_state.show_about_me = False
-    st.rerun()
-st.sidebar.divider()
+# (Auth logic merged below, with preload execution)
 
 # --- HELPER FUNCTIONS ---
 def get_scraper():
     return BrickLinkScraper()
+
+def dummy_clear():
+    pass
+
+get_scraper.clear = dummy_clear
 
 
 
@@ -242,19 +138,19 @@ def delete_from_db(item_id):
         # If deleting a set, also remove its minifigs from collection
         if not any(c.isalpha() for c in item_id):  # It's a set (no letters)
             # Get inventory to find minifigs
-            inv = db.get_inventory_list(item_id)
-            if inv and "minifigs" in inv:
-                st.info(f"🔗 Removing {len(inv['minifigs'])} minifigs from collection...")
-                for fig in inv["minifigs"]:
+            inv, _ = db.get_inventory(item_id)
+            if inv:
+                st.info(f"🔗 Removing {len(inv)} minifigs from collection...")
+                for fig in inv:
                     fig_id = fig["id"]
                     db.remove_from_collection(fig_id, "Ram's Collection")
                     db.remove_from_collection(fig_id, "Udi's Collection")
         
-        # PostgreSQL uses %s, not ?
-        db.cursor.execute("DELETE FROM items WHERE item_id = %s", (item_id,))
+        # SQLite uses ?
+        db.cursor.execute("DELETE FROM items WHERE item_id = ?", (item_id,))
         deleted_items = db.cursor.rowcount
         
-        db.cursor.execute("DELETE FROM inventory_lists WHERE set_id = %s", (item_id,))
+        db.cursor.execute("DELETE FROM inventory_lists WHERE set_id = ?", (item_id,))
         
         # Remove from collections (Ram's and Udi's) - Best effort
         db.remove_from_collection(item_id, "Ram's Collection") 
@@ -393,157 +289,159 @@ def process_analysis(item_id, deep_scan_enabled, force_scrape=False, progress_ca
                 needs_scrape = True
 
     scraper = get_scraper()
-    
-    # 2. Scrape if needed
-    if needs_scrape:
-        try:
-            if progress_callback: progress_callback(f"⏳ Scraping {item_id}...")
-            
-            # Determine type
-            itype = 'M' if any(c.isalpha() for c in item_id) else 'S'
-            
-            scrape_result = scraper.scrape(item_id, item_type=itype, force=True)
-            if scrape_result and "error" in scrape_result:
-                return {"error": scrape_result["error"]}
-            
-            if scrape_result:
-                item_data = db.get_item(item_id) # Reload cleaned
-        except Exception as e:
-            return {"error": f"Scrape failed: {e}"}
-
-    if not item_data:
-        return {"error": f"No data found for {item_id}"}
-
-    # 3. Minifigure Logic
-    minifig_new = 0.0
-    minifig_used = 0.0
-    mf_details = []
-    mf_images = []
-    mf_captions = []
-
-    if not any(c.isalpha() for c in item_id):
-        inv, _ = db.get_inventory(item_id)
-        if not inv:
-            try: 
-                if progress_callback: progress_callback("🔎 Fetching inventory...")
-                inv = scraper.get_minifigs_in_set(item_id)
-            except: pass
-
-        if inv:
-            num_figs = len(inv)
-            if progress_callback: progress_callback(f"👥 Analyzing {num_figs} Minifigures...")
-            
-            # Cache for minifigure analysis to avoid redundant calculations
-            @st.cache_data(ttl=1800, show_spinner=False)  # Cache for 30 minutes
-            def get_cached_minifig_prices(fig_id, fig_data_json):
-                """Cached minifigure price analysis to avoid redundant PriceAnalyzer calls"""
-                try:
-                    fig_data = json.loads(fig_data_json)
-                    fa = PriceAnalyzer(fig_data).analyze()
-                    return fa['new']['market_price'], fa['used']['market_price']
-                except:
-                    return 0.0, 0.0
-            
-            for idx, fig in enumerate(inv):
-                # Progress Update
-                if progress_callback: 
-                    progress_callback(f"👥 Analyzing Minifigures... ({idx+1}/{num_figs}): {fig['name'][:20]}...")
-
-                # Get fig data
-                fd = db.get_item(fig['id'])
+    try:
+        # 2. Scrape if needed
+        if needs_scrape:
+            try:
+                if progress_callback: progress_callback(f"⏳ Scraping {item_id}...")
                 
-                # Check for bad data or stale data
-                fig_needs_scrape = False
-                if not fd:
-                    fig_needs_scrape = True
-                else:
-                    # 1. Freshness Check (30 days)
-                    last_updated = fd.get("meta", {}).get("timestamp") or fd.get("updated_at")
-                    if last_updated:
-                        try:
-                            dt = datetime.fromisoformat(last_updated)
-                            if datetime.now() - dt > timedelta(days=30):
-                                fig_needs_scrape = True
-                        except: fig_needs_scrape = True
-
-                    # 2. Deep Scan (Missing content)
-                    if not fig_needs_scrape and deep_scan_enabled:
-                        try:
-                            has_new = fd.get('new', {}).get('sold') or fd.get('new', {}).get('stock')
-                            has_used = fd.get('used', {}).get('sold') or fd.get('used', {}).get('stock')
-                            if not has_new and not has_used:
-                                fig_needs_scrape = True
-                        except: fig_needs_scrape = True
+                # Determine type
+                itype = 'M' if any(c.isalpha() for c in item_id) else 'S'
                 
-                # Scrape if needed
-                if fig_needs_scrape:
-                    try:
-                        msg = f"⬇️ Fetching data for {fig['name'][:15]}... ({idx+1}/{num_figs})"
-                        if progress_callback: progress_callback(msg)
-                        else: st.toast(msg, icon="⬇️")
-                        
-                        fresh_data = scraper.scrape(fig['id'], item_type='M')
-                        if fresh_data:
-                            db.save_item(fig['id'], fresh_data)
-                            fd = db.get_item(fig['id']) # Reload immediately
-                    except Exception as e:
-                        print(f"Failed to fix {fig['id']}: {e}")
+                scrape_result = scraper.scrape(item_id, item_type=itype, force=True)
+                if scrape_result and "error" in scrape_result:
+                    return {"error": scrape_result["error"]}
+                
+                if scrape_result:
+                    item_data = db.get_item(item_id) # Reload cleaned
+            except Exception as e:
+                return {"error": f"Scrape failed: {e}"}
 
-                # Calculate using CACHED analysis
-                if fd:
-                    try:
-                        # Use cached analysis to avoid redundant PriceAnalyzer calls
-                        fig_data_json = json.dumps(fd)
-                        p_new, p_used = get_cached_minifig_prices(fig['id'], fig_data_json)
-                        
-                        qty = fig.get('qty', fig.get('quantity', 1))
-                        minifig_new += (p_new * qty)
-                        minifig_used += (p_used * qty)
-                        
-                        mf_details.append({
-                            "id": fig['id'], 
-                            "name": fig['name'],
-                            "qty": qty,
-                            "new": p_new, 
-                            "used": p_used
-                        })
-                        
-                        img_url = get_img_url(fig['id'])
-                        mf_images.append(img_url)
-                        short = (fig['name'][:15] + '..') if len(fig['name']) > 15 else fig['name']
-                        mf_captions.append(f"{short}\n({p_new:.0f}₪)")
-                    except: pass
-    
-    # 4. Final Report
-    analysis = PriceAnalyzer(item_data).analyze(minifig_value_new=minifig_new, minifig_value_used=minifig_used)
-    report_text = create_console_report(item_id, analysis, mf_details, minifig_new, minifig_used)
-    
-    # 5. Summary Data
-    sniper = analysis.get("deep_dive", {}).get("sniper", {})
-    summary = {
-        "ID": item_id,
-        "Name": analysis.get("meta", {}).get("item_name", "Unknown"),
-        "New Price": analysis.get("new", {}).get("market_price", 0),
-        "Used Price": analysis.get("used", {}).get("market_price", 0),
-        "Profit": sniper.get("profit_abs", 0),
-        "Rating": sniper.get("rating", "N/A"),
-        "Status": analysis.get("deep_dive", {}).get("lifecycle", {}).get("status", "N/A")
-    }
+        if not item_data:
+            return {"error": f"No data found for {item_id}"}
 
-    # Save to Collection ONLY if item was scraped (not just read from cache)
-    if needs_scrape:
-        db.add_to_collection(item_id, "Ram's Collection")
-    db.close()
-    
-    return {
-        "success": True,
-        "item_id": item_id,
-        "summary": summary,
-        "report": report_text,
-        "images": mf_images,
-        "captions": mf_captions,
-        "main_img": get_img_url(item_id)
-    }
+        # 3. Minifigure Logic
+        minifig_new = 0.0
+        minifig_used = 0.0
+        mf_details = []
+        mf_images = []
+        mf_captions = []
+
+        if not any(c.isalpha() for c in item_id):
+            inv, _ = db.get_inventory(item_id)
+            if not inv:
+                try: 
+                    if progress_callback: progress_callback("🔎 Fetching inventory...")
+                    inv = scraper.get_minifigs_in_set(item_id)
+                except: pass
+
+            if inv:
+                num_figs = len(inv)
+                if progress_callback: progress_callback(f"👥 Analyzing {num_figs} Minifigures...")
+                
+                # Cache for minifigure analysis to avoid redundant calculations
+                @st.cache_data(ttl=1800, show_spinner=False)  # Cache for 30 minutes
+                def get_cached_minifig_prices(fig_id, fig_data_json):
+                    """Cached minifigure price analysis to avoid redundant PriceAnalyzer calls"""
+                    try:
+                        fig_data = json.loads(fig_data_json)
+                        fa = PriceAnalyzer(fig_data).analyze()
+                        return fa['new']['market_price'], fa['used']['market_price']
+                    except:
+                        return 0.0, 0.0
+                
+                for idx, fig in enumerate(inv):
+                    # Progress Update
+                    if progress_callback: 
+                        progress_callback(f"👥 Analyzing Minifigures... ({idx+1}/{num_figs}): {fig['name'][:20]}...")
+
+                    # Get fig data
+                    fd = db.get_item(fig['id'])
+                    
+                    # Check for bad data or stale data
+                    fig_needs_scrape = False
+                    if not fd:
+                        fig_needs_scrape = True
+                    else:
+                        # 1. Freshness Check (30 days)
+                        last_updated = fd.get("meta", {}).get("timestamp") or fd.get("updated_at")
+                        if last_updated:
+                            try:
+                                dt = datetime.fromisoformat(last_updated)
+                                if datetime.now() - dt > timedelta(days=30):
+                                    fig_needs_scrape = True
+                            except: fig_needs_scrape = True
+
+                        # 2. Deep Scan (Missing content)
+                        if not fig_needs_scrape and deep_scan_enabled:
+                            try:
+                                has_new = fd.get('new', {}).get('sold') or fd.get('new', {}).get('stock')
+                                has_used = fd.get('used', {}).get('sold') or fd.get('used', {}).get('stock')
+                                if not has_new and not has_used:
+                                    fig_needs_scrape = True
+                            except: fig_needs_scrape = True
+                    
+                    # Scrape if needed
+                    if fig_needs_scrape:
+                        try:
+                            msg = f"⬇️ Fetching data for {fig['name'][:15]}... ({idx+1}/{num_figs})"
+                            if progress_callback: progress_callback(msg)
+                            else: st.toast(msg, icon="⬇️")
+                            
+                            fresh_data = scraper.scrape(fig['id'], item_type='M')
+                            if fresh_data:
+                                db.save_item(fig['id'], fresh_data)
+                                fd = db.get_item(fig['id']) # Reload immediately
+                        except Exception as e:
+                            print(f"Failed to fix {fig['id']}: {e}")
+
+                    # Calculate using CACHED analysis
+                    if fd:
+                        try:
+                            # Use cached analysis to avoid redundant PriceAnalyzer calls
+                            fig_data_json = json.dumps(fd)
+                            p_new, p_used = get_cached_minifig_prices(fig['id'], fig_data_json)
+                            
+                            qty = fig.get('qty', fig.get('quantity', 1))
+                            minifig_new += (p_new * qty)
+                            minifig_used += (p_used * qty)
+                            
+                            mf_details.append({
+                                "id": fig['id'], 
+                                "name": fig['name'],
+                                "qty": qty,
+                                "new": p_new, 
+                                "used": p_used
+                            })
+                            
+                            img_url = get_img_url(fig['id'])
+                            mf_images.append(img_url)
+                            short = (fig['name'][:15] + '..') if len(fig['name']) > 15 else fig['name']
+                            mf_captions.append(f"{short}\n({p_new:.0f}₪)")
+                        except: pass
+        
+        # 4. Final Report
+        analysis = PriceAnalyzer(item_data).analyze(minifig_value_new=minifig_new, minifig_value_used=minifig_used)
+        report_text = create_console_report(item_id, analysis, mf_details, minifig_new, minifig_used)
+        
+        # 5. Summary Data
+        sniper = analysis.get("deep_dive", {}).get("sniper", {})
+        summary = {
+            "ID": item_id,
+            "Name": analysis.get("meta", {}).get("item_name", "Unknown"),
+            "New Price": analysis.get("new", {}).get("market_price", 0),
+            "Used Price": analysis.get("used", {}).get("market_price", 0),
+            "Profit": sniper.get("profit_abs", 0),
+            "Rating": sniper.get("rating", "N/A"),
+            "Status": analysis.get("deep_dive", {}).get("lifecycle", {}).get("status", "N/A")
+        }
+
+        # Save to Collection ONLY if item was scraped (not just read from cache)
+        if needs_scrape:
+            db.add_to_collection(item_id, "Ram's Collection")
+        db.close()
+        
+        return {
+            "success": True,
+            "item_id": item_id,
+            "summary": summary,
+            "report": report_text,
+            "images": mf_images,
+            "captions": mf_captions,
+            "main_img": get_img_url(item_id)
+        }
+    finally:
+        scraper.close()
 
 # --- SMART CACHE INVALIDATION ---
 def get_latest_update_timestamp():
@@ -565,40 +463,9 @@ def get_latest_update_timestamp():
         return datetime.now().isoformat()
 
 # --- DATA LOADING ---
-@st.cache_data(show_spinner=False, ttl=300)  # 5 minutes (increased from 10s)
+@st.cache_data(show_spinner=False, ttl=300)  # 5 minutes
 def load_data(_cache_key):
-    # Force redeploy - connection leak fix
     db = Database()
-    
-    # 1. Fetch Items WITH CACHED COLUMNS (Performance Optimization)
-    db.cursor.execute("""
-        SELECT item_id, json_data, updated_at, 
-               cached_rating, cached_profit, cached_margin
-        FROM items
-    """)
-    all_rows = db.cursor.fetchall()
-    
-    # 2. Fetch Stale Items
-    stale_items = set(db.get_stale_items(days_threshold=30))
-    
-    # 3. Fetch Collection (DB + CSV)
-    collection_ids = set()
-    
-    # From DB
-    db_collection = db.get_collection_items("Ram's Collection")
-    for cid in db_collection:
-        collection_ids.add(cid.lower())
-        
-    # From CSV (Legacy Support)
-    try:
-        if os.path.exists("BrickEconomy-Sets(2).csv"):
-            df_csv = pd.read_csv("BrickEconomy-Sets(2).csv")
-            for _, row in df_csv.iterrows():
-                raw_id = str(row['Number']).strip().lower()
-                base_id = raw_id.split('-')[0] if '-' in raw_id else raw_id
-                collection_ids.add(base_id)
-    except: pass
-    
     try:
         # 1. Fetch Items WITH CACHED COLUMNS (Performance Optimization)
         db.cursor.execute("""
@@ -611,15 +478,16 @@ def load_data(_cache_key):
         # 2. Fetch Stale Items
         stale_items = set(db.get_stale_items(days_threshold=30))
         
-        # 3. Fetch Collection (DB + CSV)
+        # 3. Fetch Collections
         collection_ids = set()
-        
-        # From DB
-        db_collection = db.get_collection_items("Ram's Collection")
-        for cid in db_collection:
+        udi_collection_ids = set()
+
+        for cid in db.get_collection_items("Ram's Collection"):
             collection_ids.add(cid.lower())
-            
-        # From CSV (Legacy Support)
+        for cid in db.get_collection_items("Udi's Collection"):
+            udi_collection_ids.add(cid.lower())
+
+        # Legacy CSV support
         try:
             csv_df = pd.read_csv("rams_collection.csv")
             for cid in csv_df['ID'].astype(str):
@@ -692,6 +560,7 @@ def load_data(_cache_key):
                     "Margin %": cached_margin or 0,
                     "Rating": cached_rating or "N/A",
                     "InCollection": item_id.lower() in collection_ids,
+                    "InUdiCollection": item_id.lower() in udi_collection_ids,
                     "Stale": is_stale,
                     # Initialize columns that will be updated in polybag logic
                     "Figs %": 0.0,
@@ -708,13 +577,13 @@ def load_data(_cache_key):
         # 5. Polybag Logic (Used Price = Sum of Minifigs)
         for s in sets:
             try:
-                inv = db.get_inventory_list(s["ID"])
-                if not inv or "minifigs" not in inv: continue
-                
+                inv, _ = db.get_inventory(s["ID"])
+                if not inv: continue
+
                 fig_sum = 0.0
-                for fig in inv["minifigs"]:
+                for fig in inv:
                     fig_id = fig["id"]
-                    qty = fig.get("quantity", 1)
+                    qty = fig.get("qty", fig.get("quantity", 1))
                     fig_price = price_map.get(fig_id, 0)
                     fig_sum += (fig_price * qty)
                 
@@ -738,6 +607,130 @@ def load_data(_cache_key):
     finally:
         # ALWAYS close the database connection
         db.close()
+
+
+# --- PRE-LOAD DATABASE AND DATA (Executes on initial app load) ---
+if "db_preloaded" not in st.session_state:
+    with st.spinner("Initializing system and pre-loading database... ⚡"):
+        try:
+            from database import get_db_pool
+            get_db_pool()
+            cache_key = get_latest_update_timestamp()
+            load_data(cache_key)
+        except Exception as e:
+            st.error(f"Preload failed: {e}")
+    st.session_state.db_preloaded = True
+
+# --- ROLE SELECTION & AUTHENTICATION ---
+# Initialize session state
+if "user_role" not in st.session_state:
+    st.session_state.user_role = None
+if "admin_authenticated" not in st.session_state:
+    st.session_state.admin_authenticated = False
+if "show_about_me" not in st.session_state:
+    st.session_state.show_about_me = False
+if "show_readme" not in st.session_state:
+    st.session_state.show_readme = False
+
+# Role selection page
+if st.session_state.user_role is None:
+    st.title("🧱 BrickLink Sniper V1.4")
+    st.markdown("### Welcome! Please select your access level:")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("#### 👤 User Mode")
+        st.caption("Public access to analysis tools and database")
+        if st.button("🚀 Enter as User", use_container_width=True):
+            st.session_state.user_role = "user"
+            st.rerun()
+    
+    with col2:
+        st.markdown("#### 🔐 Admin Mode")
+        st.caption("Full access including personal collections")
+        if st.button("🔑 Enter as Admin", use_container_width=True):
+            st.session_state.user_role = "admin"
+            st.rerun()
+    
+    st.divider()
+    
+    # Feature Showcase Section
+    st.markdown("## 🎯 BrickLink Sniper Dashboard")
+    st.markdown("### *Professional LEGO Investment Analysis & Portfolio Management Platform*")
+    st.markdown("")
+    
+    # Feature highlights with icons and descriptions
+    features = [
+        {
+            "icon": "⚡",
+            "title": "Enterprise-Grade Performance",
+            "description": "Built with cutting-edge optimizations delivering **15x faster** data loading (<2s for 1000 items) and **5x faster** batch processing. Never miss a market move with real-time analysis powered by parallel execution and smart caching."
+        },
+        {
+            "icon": "📱",
+            "title": "Seamless Multi-Device Experience",
+            "description": "Engineered with **Multi-Session Connection Pooling**, enabling conflict-free simultaneous access from PC and smartphone. Check prices on the go without database errors or session conflicts."
+        },
+        {
+            "icon": "🎯",
+            "title": "Advanced Investment Tools",
+            "description": "Comprehensive suite including **Set Analyzer** for real-time scraping, **Portfolio Manager** for tracking growth, and **Sniper War Room** highlighting high-profit S+ rated opportunities instantly."
+        },
+        {
+            "icon": "🕷️",
+            "title": "Autonomous Data Mining",
+            "description": "Powered by background agents that continuously map the BrickLink catalog and detect price changes. Autonomous scanners keep your database populated with fresh market insights 24/7."
+        },
+        {
+            "icon": "🔐",
+            "title": "Smart & Secure Architecture",
+            "description": "Utilizes **Smart Cache Invalidation** (90% hit rate) to prevent stale data and includes **Role-Based Access Control** to secure your personal collection data and management tools."
+        }
+    ]
+    
+    for feature in features:
+        st.markdown(f"**{feature['icon']} {feature['title']}**")
+        st.markdown(f"{feature['description']}")
+        st.markdown("")
+    
+    st.divider()
+    render_about_me_content()
+    
+    st.stop()
+
+# Admin authentication
+if st.session_state.user_role == "admin" and not st.session_state.admin_authenticated:
+    st.title("🔐 Admin Authentication")
+    
+    password = st.text_input("Enter Admin Password", type="password", key="admin_password")
+    
+    col1, col2 = st.columns([1, 3])
+    with col1:
+        if st.button("🔓 Unlock"):
+            if password == os.getenv("ADMIN_PASSWORD", "7399"):
+                st.session_state.admin_authenticated = True
+                st.success("✅ Access granted!")
+                time.sleep(0.5)
+                st.rerun()
+            else:
+                st.error("❌ Incorrect password")
+    
+    with col2:
+        if st.button("← Back to Role Selection"):
+            st.session_state.user_role = None
+            st.rerun()
+    
+    st.stop()
+
+# Display current mode in sidebar
+st.sidebar.markdown(f"**Mode:** {'🔐 Admin' if st.session_state.user_role == 'admin' else '👤 User'}")
+if st.sidebar.button("🔄 Switch Mode"):
+    st.session_state.user_role = None
+    st.session_state.admin_authenticated = False
+    st.session_state.show_about_me = False
+    st.rerun()
+st.sidebar.divider()
 
 # --- SIDEBAR NAV ---
 # Build navigation options based on role
@@ -788,7 +781,7 @@ if st.session_state.user_role == "admin" and mode in ["🔐 Ram's Collection", "
                     db.add_to_collection(add_item_id, current_collection)
                     
                     # Get inventory and add minifigs
-                    db.cursor.execute("SELECT json_data FROM inventory_lists WHERE set_id = %s", (add_item_id,))
+                    db.cursor.execute("SELECT json_data FROM inventory_lists WHERE set_id = ?", (add_item_id,))
                     result = db.cursor.fetchone()
                     if result:
                         inv = json.loads(result[0])
@@ -910,12 +903,32 @@ if mode == "📊 Set Analyzer Database":
     
     st.divider()
     
-    # Single table view for all sets
+    # Search + filter controls
     st.subheader("📦 All Sets Database")
-    
+    fc1, fc2, fc3, fc4 = st.columns([3, 1, 1, 1])
+    with fc1:
+        search_query = st.text_input("🔍 Search by name or ID", placeholder="e.g. Batmobile, 76001")
+    with fc2:
+        rating_filter = st.selectbox("Rating", ["All", "EXCELLENT", "GREAT INVEST", "GOOD", "IRRELEVANT", "N/A"])
+    with fc3:
+        year_vals = sorted(df_sets["Year"].dropna().unique().tolist(), reverse=True) if not df_sets.empty else []
+        year_filter = st.selectbox("Year", ["All"] + [str(y) for y in year_vals if y])
+    with fc4:
+        sort_col = st.selectbox("Sort by", ["Profit", "New Price", "Used Price", "Year"])
+
     if not df_sets.empty:
-        # Sort by profit descending by default
-        df_display = df_sets.sort_values("Profit", ascending=False)
+        df_display = df_sets.copy()
+        if search_query:
+            q = search_query.lower()
+            df_display = df_display[
+                df_display["Name"].str.lower().str.contains(q, na=False) |
+                df_display["ID"].str.lower().str.contains(q, na=False)
+            ]
+        if rating_filter != "All":
+            df_display = df_display[df_display["Rating"] == rating_filter]
+        if year_filter != "All":
+            df_display = df_display[df_display["Year"] == year_filter]
+        df_display = df_display.sort_values(sort_col, ascending=False)
         
         if st.session_state.user_role == "admin":
             # Interactive Editor for Admins (Select to Delete)
@@ -944,6 +957,7 @@ if mode == "📊 Set Analyzer Database":
                     "Used Conf": st.column_config.TextColumn("Used Conf", width="small"),
                     "Stale": st.column_config.CheckboxColumn("Stale", width="small"),
                     "InCollection": None,
+                    "InUdiCollection": None,
                     "Last Scraped": st.column_config.DatetimeColumn("Last Scraped", format="DD/MM/YYYY HH:mm")
                 },
                 disabled=[c for c in df_display.columns if c != "Select"] # Only allow editing "Select"
@@ -985,12 +999,17 @@ if mode == "📊 Set Analyzer Database":
                     "Used Conf": st.column_config.TextColumn("Used Conf", width="small"),
                     "Stale": st.column_config.CheckboxColumn("Stale", width="small"),
                     "InCollection": None,
+                    "InUdiCollection": None,
                     "Last Scraped": None
                 }
             )
+        # CSV Export
+        if not df_sets.empty:
+            csv_data = df_display[["ID", "Name", "Year", "New Price", "Used Price", "Profit", "Margin %", "Rating"]].to_csv(index=False)
+            st.download_button("📥 Export Sets to CSV", csv_data, "sets_export.csv", "text/csv")
     else:
         st.info("No sets in database. Use Set Analyzer to scan items.")
-    
+
     # Minifigures Section
     st.divider()
     st.subheader("👥 Minifigures Database")
@@ -1024,7 +1043,8 @@ if mode == "📊 Set Analyzer Database":
                 "Margin %": st.column_config.ProgressColumn("Margin", format="%.0f%%", min_value=-50, max_value=100),
                 "New Conf": st.column_config.TextColumn("New Conf", width="small"),
                 "Used Conf": st.column_config.TextColumn("Used Conf", width="small"),
-                "InCollection": None,  # Hide this column
+                "InCollection": None,
+                "InUdiCollection": None,
                 "Last Scraped": st.column_config.DatetimeColumn("Last Scraped", format="DD/MM/YYYY HH:mm") if st.session_state.user_role == "admin" else None
             }
         )
@@ -1072,22 +1092,23 @@ if mode == "📊 Set Analyzer Database":
         # FAST query using cached columns (no JSON parsing needed)
         db.cursor.execute("""
             SELECT item_id, cached_rating, cached_profit, cached_margin, updated_at
-            FROM items 
-            WHERE updated_at > %s 
+            FROM items
+            WHERE updated_at > ?
               AND cached_rating IN ('GREAT INVEST', 'EXCELLENT')
               AND cached_profit > 0
             ORDER BY cached_profit DESC
             LIMIT 50
         """, (cutoff_time,))
-        
+
         war_room_items = []
         for row in db.cursor.fetchall():
+            scraped_str = str(row[4])[:16] if row[4] else "N/A"
             war_room_items.append({
                 "🎯 ID": row[0],
                 "💰 Profit": f"{row[2]:.2f} ₪",
                 "📈 Margin": f"{row[3]:.1f}%",
                 "⭐ Rating": row[1],
-                "🕐 Scraped": row[4].strftime("%H:%M"),
+                "🕐 Scraped": scraped_str,
                 "🛒 Buy Link": f"https://www.bricklink.com/v2/catalog/catalogitem.page?S={row[0]}#T=S&O={{\"iconly\":0}}"
             })
         
@@ -1358,13 +1379,11 @@ elif mode == "🔐 Udi's Collection":
     cache_key = get_latest_update_timestamp()
     df_sets, df_figs = load_data(cache_key)
     
-    # Filter to Udi's Collection (using a different collection name in database)
-    # Note: Items need to be added to "Udi's Collection" via Set Analyzer
+    # Filter to Udi's Collection
     if not df_sets.empty:
-        # For now, show empty until items are added to Udi's collection
-        df_sets = df_sets[df_sets.get("Collection", "") == "Udi's Collection"] if "Collection" in df_sets.columns else pd.DataFrame()
+        df_sets = df_sets[df_sets["InUdiCollection"] == True]
     if not df_figs.empty:
-        df_figs = df_figs[df_figs.get("Collection", "") == "Udi's Collection"] if "Collection" in df_figs.columns else pd.DataFrame()
+        df_figs = df_figs[df_figs["InUdiCollection"] == True]
     
     # Check if collection is empty
     if df_sets.empty and df_figs.empty:
@@ -1568,27 +1587,23 @@ elif mode == "🔎 Set Analyzer":
                     
                     if use_parallel:
                         # PARALLEL PROCESSING (for batches > 5 items)
-                        # Using 2 workers to prevent pool exhaustion
                         with ThreadPoolExecutor(max_workers=2) as executor:
-                            # Submit all tasks
                             futures = {
                                 executor.submit(process_single_item, item_id): item_id
                                 for item_id in raw_ids
                             }
-                            
-                            # Process results as they complete
+
+                            # Collect results keyed by item_id to reorder later
+                            results_map = {}
                             completed = 0
                             for future in as_completed(futures):
                                 completed += 1
                                 item_id = futures[future]
-                                
-                                # Calculate ETA
+
                                 elapsed = time.time() - start_time
                                 avg_time = elapsed / completed
-                                remaining_items = total_items - completed
-                                est_time_left = avg_time * remaining_items
-                                
-                                # Update progress
+                                est_time_left = avg_time * (total_items - completed)
+
                                 prog_bar.progress(completed / total_items)
                                 status_txt.text(
                                     f"⏳ {completed}/{total_items} completed | "
@@ -1596,27 +1611,28 @@ elif mode == "🔎 Set Analyzer":
                                     f"ETA: {est_time_left:.1f}s | "
                                     f"Speed: {avg_time:.1f}s/item"
                                 )
-                                
-                                # Get result
+
                                 try:
-                                    result = future.result()
-                                    
-                                    if result.get("success"):
-                                        summary = result["summary"]
-                                        summaries.append(summary)
-                                        expanders_data.append({
-                                            "id": result["item_id"],
-                                            "name": summary["Name"],
-                                            "report": result["report"],
-                                            "images": result["images"],
-                                            "captions": result["captions"],
-                                            "main_img": result["main_img"]
-                                        })
-                                    else:
-                                        st.error(f"Error {item_id}: {result.get('error', 'Unknown error')}")
-                                
+                                    results_map[item_id] = future.result()
                                 except Exception as e:
-                                    st.error(f"Error {item_id}: {str(e)}")
+                                    results_map[item_id] = {"error": str(e), "item_id": item_id, "success": False}
+
+                        # Re-order results to match original input order
+                        for item_id in raw_ids:
+                            result = results_map.get(item_id, {})
+                            if result.get("success"):
+                                summary = result["summary"]
+                                summaries.append(summary)
+                                expanders_data.append({
+                                    "id": result["item_id"],
+                                    "name": summary["Name"],
+                                    "report": result["report"],
+                                    "images": result["images"],
+                                    "captions": result["captions"],
+                                    "main_img": result["main_img"]
+                                })
+                            else:
+                                st.error(f"Error {item_id}: {result.get('error', 'Unknown error')}")
                     
                     else:
                         # SEQUENTIAL PROCESSING (for batches ≤ 5 items)
@@ -1698,6 +1714,20 @@ elif mode == "🔎 Set Analyzer":
                         if res["images"]:
                             st.markdown("### 👥 Minifigures Gallery")
                             render_gallery_html(res["images"], res["captions"])
+
+                        # Price history chart
+                        try:
+                            db_hist = Database()
+                            history = db_hist.get_price_history(item_id, days=90)
+                            db_hist.close()
+                            if len(history) >= 2:
+                                hist_df = pd.DataFrame(history, columns=["New", "Used", "Conf New", "Conf Used", "Date"])
+                                hist_df["Date"] = pd.to_datetime(hist_df["Date"])
+                                hist_df = hist_df[hist_df["New"] > 0].sort_values("Date")
+                                if not hist_df.empty:
+                                    st.markdown("### 📈 Price History (90 days)")
+                                    st.line_chart(hist_df.set_index("Date")[["New", "Used"]])
+                        except: pass
 
                         # Save to history
                         st.session_state.messages.append({
