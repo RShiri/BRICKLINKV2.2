@@ -130,6 +130,28 @@ def render_gallery_html(images, captions):
 
 
 
+def remove_from_collection(item_id, collection_name):
+    """Removes an item (and its minifigs if it's a set) from a collection only.
+    Does NOT delete the item from the main database."""
+    item_id = str(item_id).strip()
+    db = Database()
+    try:
+        # If it's a set, also remove its minifigs from the collection
+        if not any(c.isalpha() for c in item_id):
+            inv, _ = db.get_inventory(item_id)
+            if inv:
+                for fig in inv:
+                    db.remove_from_collection(fig["id"], collection_name)
+
+        db.remove_from_collection(item_id, collection_name)
+        db.conn.commit()
+        st.toast(f"Removed {item_id} from {collection_name}", icon="✅")
+    except Exception as e:
+        st.error(f"Remove failed: {e}")
+    finally:
+        db.close()
+
+
 def delete_from_db(item_id):
     """Deletes an item from the database."""
     item_id = str(item_id).strip()
@@ -1213,13 +1235,11 @@ elif mode == "🔐 Ram's Collection":
             """)
         
         if not df_sets.empty:
-            df_new = df_sets[df_sets["New Price"] > 0].sort_values("Profit", ascending=False)
-            
+            df_new = df_sets[df_sets["New Price"] > 0].sort_values("Profit", ascending=False).copy()
+
             if st.session_state.user_role == "admin":
-                # Admin View (Select to Delete)
+                # Admin View (Select to Remove from Collection)
                 df_new["Select"] = False
-                cols = ["Select"] + [c for c in df_new.columns if c != "Select"]
-                df_new = df_new[cols]
 
                 edited_new = st.data_editor(
                     df_new,
@@ -1227,7 +1247,7 @@ elif mode == "🔐 Ram's Collection":
                     column_order=["Select", "Stale", "Image", "ID", "Name", "New Price", "New Conf", "Used Price", "Profit", "Margin %", "Rating"],
                     hide_index=True,
                     column_config={
-                        "Select": st.column_config.CheckboxColumn("🗑️", width="small", help="Select to delete from collection"),
+                        "Select": st.column_config.CheckboxColumn("🗑️", width="small", help="Select to remove from collection"),
                         "Image": st.column_config.ImageColumn("Img", width="small"),
                         "New Price": st.column_config.NumberColumn("New Price", format="%.2f ₪"),
                         "Used Price": st.column_config.NumberColumn("Used Price", format="%.2f ₪"),
@@ -1237,21 +1257,15 @@ elif mode == "🔐 Ram's Collection":
                     disabled=[c for c in df_new.columns if c != "Select"],
                     key="editor_ram_tab1"
                 )
-                
-                # Delete Action
-                selected_tab1 = edited_new[edited_new.Select]
+
+                selected_tab1 = edited_new[edited_new["Select"]]
                 if not selected_tab1.empty:
-                    st.error(f"🗑️ {len(selected_tab1)} items selected")
-                    if st.button("Delete Selected", key="btn_del_tab1"):
-                        count = 0
+                    st.warning(f"🗑️ {len(selected_tab1)} items selected for removal")
+                    if st.button("Remove from Collection", key="btn_del_tab1"):
                         for item_id in selected_tab1["ID"]:
-                            try:
-                                delete_from_db(item_id)
-                                count += 1
-                            except: pass
-                        st.toast(f"Deleted {count} items", icon="🗑️")
+                            remove_from_collection(item_id, "Ram's Collection")
                         st.cache_data.clear()
-                        time.sleep(1)
+                        time.sleep(0.5)
                         st.rerun()
             else:
                 # User View
@@ -1272,51 +1286,42 @@ elif mode == "🔐 Ram's Collection":
     with tab2:
         st.caption("Undervalued Used Sets (High Minifig Value)")
         if not df_sets.empty:
-            df_used = df_sets[df_sets["Used Price"] > 0].sort_values("Figs %", ascending=False)
+            df_used = df_sets[df_sets["Used Price"] > 0].sort_values("Figs %", ascending=False).copy()
+            # Determine safe column order (Total Figs Value may not exist)
+            partout_cols_base = ["Stale", "Image", "ID", "Name", "Part-Out Alert", "Used Price", "Used Conf", "Figs %"]
             if st.session_state.user_role == "admin":
-                # Admin View
                 df_used["Select"] = False
-                cols = ["Select"] + [c for c in df_used.columns if c != "Select"]
-                df_used = df_used[cols]
 
                 edited_used = st.data_editor(
                     df_used,
                     use_container_width=True,
-                    column_order=["Select", "Stale", "Image", "ID", "Part-Out Alert", "Used Price", "Used Conf", "Total Figs Value", "Figs %"],
+                    column_order=["Select"] + partout_cols_base,
                     hide_index=True,
                     column_config={
-                        "Select": st.column_config.CheckboxColumn("🗑️", width="small", help="Select to delete from collection"),
+                        "Select": st.column_config.CheckboxColumn("🗑️", width="small", help="Select to remove from collection"),
                         "Image": st.column_config.ImageColumn("Img", width="small"),
                         "Part-Out Alert": st.column_config.TextColumn("Alert"),
                         "Used Price": st.column_config.NumberColumn("Used Price", format="%.2f ₪"),
-                         "Total Figs Value": st.column_config.NumberColumn("Total Figs Value", format="%.2f ₪"),
                         "Figs %": st.column_config.ProgressColumn("Figs Value %", format="%.0f%%", min_value=0, max_value=200)
                     },
                     disabled=[c for c in df_used.columns if c != "Select"],
                     key="editor_ram_tab2"
                 )
-                
-                # Delete Action
-                selected_tab2 = edited_used[edited_used.Select]
+
+                selected_tab2 = edited_used[edited_used["Select"]]
                 if not selected_tab2.empty:
-                    st.error(f"🗑️ {len(selected_tab2)} items selected")
-                    if st.button("Delete Selected", key="btn_del_tab2"):
-                        count = 0
+                    st.warning(f"🗑️ {len(selected_tab2)} items selected for removal")
+                    if st.button("Remove from Collection", key="btn_del_tab2"):
                         for item_id in selected_tab2["ID"]:
-                            try:
-                                delete_from_db(item_id)
-                                count += 1
-                            except: pass
-                        st.toast(f"Deleted {count} items", icon="🗑️")
+                            remove_from_collection(item_id, "Ram's Collection")
                         st.cache_data.clear()
-                        time.sleep(1)
+                        time.sleep(0.5)
                         st.rerun()
             else:
-                 # User View
                 st.dataframe(
                     df_used,
                     width=None,
-                    column_order=["Stale", "Image", "ID", "Part-Out Alert", "Used Price", "Used Conf", "Total Figs Value", "Figs %"],
+                    column_order=partout_cols_base,
                     hide_index=True,
                     column_config={
                         "Image": st.column_config.ImageColumn("Img", width="small"),
@@ -1343,32 +1348,15 @@ elif mode == "🔐 Ram's Collection":
         st.dataframe(df_figs, width="stretch", hide_index=True, column_config={"Image": st.column_config.ImageColumn()})
 
     st.sidebar.subheader("Actions")
-    del_id = st.sidebar.text_input("Delete Item ID(s)", key="delete_rams_input", help="Enter single ID or space-separated IDs for bulk delete")
-    if st.sidebar.button("🗑️ Delete Item(s)", key="delete_rams"):
+    del_id = st.sidebar.text_input("Remove Item ID(s)", key="delete_rams_input", help="Enter single ID or space-separated IDs (e.g. 75001 sh0232)")
+    if st.sidebar.button("🗑️ Remove from Collection", key="delete_rams"):
         if del_id:
-            # Parse multiple IDs
-            ids_to_delete = del_id.replace(',', ' ').split()
-            ids_to_delete = [id.strip() for id in ids_to_delete if id.strip()]
-            
-            if len(ids_to_delete) > 1:
-                # Bulk delete
-                success_count = 0
-                for item_id in ids_to_delete:
-                    try:
-                        delete_from_db(item_id)
-                        success_count += 1
-                    except Exception as e:
-                        st.sidebar.error(f"Failed to delete {item_id}: {e}")
-                
-                st.sidebar.success(f"✅ Deleted {success_count}/{len(ids_to_delete)} items")
-                st.cache_data.clear()
-                time.sleep(1)
-                st.rerun()
-            else:
-                # Single delete
-                delete_from_db(ids_to_delete[0])
-                st.cache_data.clear()
-                st.rerun()
+            ids_to_remove = [i.strip() for i in del_id.replace(',', ' ').split() if i.strip()]
+            for item_id in ids_to_remove:
+                remove_from_collection(item_id, "Ram's Collection")
+            st.cache_data.clear()
+            time.sleep(0.5)
+            st.rerun()
 
 
 elif mode == "🔐 Udi's Collection":
@@ -1469,11 +1457,14 @@ elif mode == "🔐 Udi's Collection":
         st.dataframe(df_figs, width="stretch", hide_index=True, column_config={"Image": st.column_config.ImageColumn()})
 
     st.sidebar.subheader("Actions")
-    del_id = st.sidebar.text_input("Delete Item ID", key="udi_delete_input")
-    if st.sidebar.button("Delete Item", key="delete_udis"):
+    del_id = st.sidebar.text_input("Remove Item ID(s)", key="udi_delete_input", help="Enter single ID or space-separated IDs")
+    if st.sidebar.button("🗑️ Remove from Collection", key="delete_udis"):
         if del_id:
-            delete_from_db(del_id)
+            ids_to_remove = [i.strip() for i in del_id.replace(',', ' ').split() if i.strip()]
+            for item_id in ids_to_remove:
+                remove_from_collection(item_id, "Udi's Collection")
             st.cache_data.clear()
+            time.sleep(0.5)
             st.rerun()
 
 
