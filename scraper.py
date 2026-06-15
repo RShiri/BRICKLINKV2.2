@@ -24,19 +24,41 @@ class BrickLinkScraper:
             return self.driver
             
         chrome_options = Options()
-        chrome_options.add_argument("--headless")  # Run browser invisibly in background
+        chrome_options.add_argument("--headless=new")  # Run browser invisibly in background (modern headless)
         chrome_options.add_argument("--log-level=3")
-        chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36")
+        chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("--disable-gpu")
+        
+        # Anti-detection flags to bypass WAF block
+        chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        chrome_options.add_experimental_option('useAutomationExtension', False)
         
         self.driver = webdriver.Chrome(options=chrome_options)
         self.driver.set_page_load_timeout(30)
+        
+        # Establish session first to prevent catalog item redirects
+        try:
+            self.driver.get("https://www.bricklink.com")
+            time.sleep(1.5)
+        except Exception as e:
+            print(f"Failed to load homepage for session: {e}")
+            
         return self.driver
 
     def close(self):
         """Closes the persistent driver."""
         if self.driver:
-            self.driver.quit()
+            try:
+                self.driver.quit()
+            except:
+                pass
             self.driver = None
+
+    def __del__(self):
+        self.close()
 
     def get_minifigs_in_set(self, set_id: str, force: bool = False) -> List[Dict]:
         cached_data, timestamp = self.db.get_inventory(set_id)

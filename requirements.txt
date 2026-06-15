@@ -4,4 +4,5 @@ streamlit
 pandas
 colorama
 tqdm
-psycopg2-binary
+google-genai
+pydantic

@@ -2,6 +2,7 @@ import streamlit as st
 from database import Database
 from pricing_engine import PriceAnalyzer
 import pandas as pd
+import re
 
 st.set_page_config(page_title="Marvel Database 🦸", page_icon="🦸‍♂️", layout="wide")
 
@@ -26,12 +27,36 @@ MARVEL_KEYWORDS = [
     "sandman", "mysterio", "vulture", "shocker", "rhino", "scorpion",
     "miles morales", "gwen stacy", "spider-gwen", "silk", "prowler",
     "shang-chi", "ms. marvel", "kamala khan", "she-hulk", "moon knight",
-    "blade", "ghost rider", "elektra", "kingpin", "bullseye"
+    "blade", "ghost rider", "elektra", "kingpin", "bullseye",
+    "peter parker", "tony stark", "rescue", "pepper potts", "aim agent", "chitauri",
+    "outrider", "surtur", "hela", "valkyrie", "korg", "miek", "heimdall", "odin",
+    "bruce banner", "steve rogers", "natasha romanoff", "clint barton", "wanda maximoff",
+    "pietro maximoff", "quicksilver", "sam wilson", "bucky barnes", "t'challa", "shuri",
+    "okoye", "nakia", "killmonger", "m'baku", "klaue", "crossbones", "zemo", "red skull",
+    "arnim zola", "mandarin", "aldrich killian", "justin hammer", "whiplash", "obadiah stane",
+    "iron monger", "abomination", "leader", "yellowjacket", "ghost", "taskmaster",
+    "red guardian", "yelena belova", "melina vostokoff", "agatha harkness", "kang",
+    "modok", "high evolutionary", "adam warlock", "kang the conqueror"
+]
+
+DC_BLOCKLIST = [
+    "batman", "robin", "joker", "harley quinn", "catwoman", "penguin", "riddler",
+    "two-face", "bane", "poison ivy", "mr. freeze", "scarecrow", "ra's al ghul",
+    "superman", "supergirl", "lex luthor", "general zod", "brainiac", "doomsday",
+    "wonder woman", "aquaman", "flash", "green lantern", "cyborg", "shazam",
+    "green arrow", "black canary", "nightwing", "batgirl", "deathstroke",
+    "teen titans", "raven", "starfire", "beast boy", "justice league", "suicide squad",
+    "deadshot", "killer croc", "captain boomerang", "enchantress", "el diablo", "katana",
+    "rick flag", "darkseid", "steppenwolf", "parademons", "apokolips", "martian manhunter",
+    "hawkman", "hawkgirl", "atom", "firestorm", "blue beetle", "booster gold", "zatanna",
+    "constantine", "lobo", "swamp thing", "plastic man", "mera", "ocean master",
+    "black adam", "sinestro", "atrocitus", "larfleeze", "reverse flash", "captain cold",
+    "heatwave", "weather wizard", "gorilla grodd", "cheetah", "ares", "circe", "giganta"
 ]
 
 # Load all superhero minifigures
-@st.cache_data(ttl=10, show_spinner=False)  # Reduced TTL for debugging
-def load_marvel_data(_progress_callback=None):
+@st.cache_data(ttl=5, show_spinner=False)  # Reduced TTL for debugging
+def load_marvel_data(cache_buster=1, _progress_callback=None):
     """Loads all Marvel superhero minifigures from database.
     
     Args:
@@ -52,10 +77,30 @@ def load_marvel_data(_progress_callback=None):
             name = meta.get("item_name", "Unknown")
             name_lower = name.lower()
             
-            # Filter: Only Marvel characters (BEFORE expensive PriceAnalyzer)
-            is_marvel = any(keyword in name_lower for keyword in MARVEL_KEYWORDS)
-            if not is_marvel:
-                continue
+            # Filter: Check if it's Marvel and not explicitly DC
+            is_marvel = any(re.search(r'\b' + re.escape(keyword) + r'\b', name_lower) for keyword in MARVEL_KEYWORDS)
+            is_dc = any(re.search(r'\b' + re.escape(keyword) + r'\b', name_lower) for keyword in DC_BLOCKLIST)
+            
+            # Special exceptions for ambiguous names
+            if "red hood" in name_lower and "spider" in name_lower:
+                is_dc = False # "dark red hood" on a Spider-Man figure
+                
+            item_id = meta.get("item_id", "")
+            
+            # Treat characters as Marvel if their name doesn't hit keywords but they appear in known IDs
+            # (BrickLink occasionally leaves off standard names for things like generic agents or generic specific suits)
+            is_marvel_override = item_id in ['sh0569', 'sh0570', 'sh0571', 'sh0572', 'sh0573', 'sh0574', 'sh0575', 'sh0578', 'sh0580', 'sh0582', 'sh0584', 'sh0601', 'sh0610', 'sh0613', 'sh0615', 'sh0616', 'sh0618', 'sh0620', 'sh0622', 'sh0624', 'sh0625', 'sh0626', 'sh0627']
+            
+            if is_marvel_override:
+                is_marvel = True
+                is_dc = False
+            
+            if not is_marvel or (is_dc and not is_marvel):
+                # If DC matched, only keep it if Marvel matched stronger (which shouldn't happen except for overrides)
+                if is_dc:
+                    continue
+                if not is_marvel:
+                    continue
             
             analyzer = PriceAnalyzer(data)
             analysis = analyzer.analyze()
@@ -71,7 +116,6 @@ def load_marvel_data(_progress_callback=None):
             # Exclude "giant-man" as that's a character name, not a big figure indicator
             # Note: All big figures have at least 7 parts and most have Giant Arms/Hands (part 43093)
             has_giant_keyword = "giant" in name_lower and "giant-man" not in name_lower
-            item_id = meta.get("item_id", "")
             
             # Marvel big figure IDs (verified from database - all use sh0XXX format)
             # Thanos: sh0230, sh0504, sh0507 (Cull Obsidian), sh0576, sh0733, sh0896
@@ -123,7 +167,7 @@ def update_progress(current, total, item_name):
     progress_text.text(f"Loading Marvel data... {current}/{total} items processed ({item_name[:30]}...)")
 
 progress_text.text("Loading Marvel database...")
-all_figures = load_marvel_data(_progress_callback=update_progress)
+all_figures = load_marvel_data(cache_buster=2, _progress_callback=update_progress)
 
 # Clear progress indicators
 progress_bar.empty()

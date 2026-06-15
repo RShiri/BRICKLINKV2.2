@@ -2,6 +2,7 @@ import streamlit as st
 from database import Database
 from pricing_engine import PriceAnalyzer
 import pandas as pd
+import re
 
 st.set_page_config(page_title="DC Database 🦸", page_icon="🦇", layout="wide")
 
@@ -31,6 +32,22 @@ DC_KEYWORDS = [
     "gorilla grodd", "cheetah", "ares", "circe", "giganta"
 ]
 
+MARVEL_BLOCKLIST = [
+    "spider", "iron man", "captain america", "thor", "hulk", "black widow", "hawkeye",
+    "avengers", "guardians", "star-lord", "groot", "rocket", "gamora", "drax",
+    "ant-man", "wasp", "doctor strange", "scarlet witch", "vision", "falcon",
+    "winter soldier", "black panther", "deadpool", "wolverine", "x-men", "cyclops",
+    "storm", "magneto", "professor x", "venom", "carnage", "thanos", "loki",
+    "ultron", "nebula", "war machine", "nick fury", "maria hill", "agent",
+    "daredevil", "punisher", "jessica jones", "luke cage", "iron fist",
+    "fantastic four", "thing", "human torch", "mr. fantastic", "invisible woman",
+    "silver surfer", "galactus", "doctor doom", "green goblin", "doc ock",
+    "sandman", "mysterio", "vulture", "shocker", "rhino", "scorpion",
+    "miles morales", "gwen stacy", "spider-gwen", "silk", "prowler",
+    "shang-chi", "ms. marvel", "kamala khan", "she-hulk", "moon knight",
+    "blade", "ghost rider", "elektra", "kingpin", "bullseye"
+]
+
 # Load all superhero minifigures
 @st.cache_data(ttl=10, show_spinner=False)  # Reduced TTL for debugging
 def load_dc_data(_progress_callback=None):
@@ -54,10 +71,19 @@ def load_dc_data(_progress_callback=None):
             name = meta.get("item_name", "Unknown")
             name_lower = name.lower()
             
-            # Filter: Only DC characters (BEFORE expensive PriceAnalyzer)
-            is_dc = any(keyword in name_lower for keyword in DC_KEYWORDS)
-            if not is_dc:
-                continue
+            # Filter: Check if it's DC and not explicitly Marvel
+            is_dc = any(re.search(r'\b' + re.escape(keyword) + r'\b', name_lower) for keyword in DC_KEYWORDS)
+            is_marvel = any(re.search(r'\b' + re.escape(keyword) + r'\b', name_lower) for keyword in MARVEL_BLOCKLIST)
+            
+            # Special exceptions
+            if "red hood" in name_lower and "spider" in name_lower:
+                is_dc = False # "dark red hood" on a Spider-Man figure
+            
+            if not is_dc or (is_marvel and not is_dc):
+                if is_marvel:
+                    continue
+                if not is_dc:
+                    continue
             
             analyzer = PriceAnalyzer(data)
             analysis = analyzer.analyze()
