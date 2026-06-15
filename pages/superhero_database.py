@@ -179,11 +179,14 @@ def render_category_table(category_df, category_name):
     # View mode
     view_mode = st.radio("View Mode", ["Gallery", "Table"], horizontal=True, key=f"view_{category_name}")
     
+    # Export columns defined here so they're available in both view modes
+    export_cols = ["id", "name", "year", "used_price", "new_price", "used_conf", "new_conf"]
+
     if view_mode == "Gallery":
         # Gallery view
         items_per_row = 5
         rows = [filtered_df.iloc[i:i+items_per_row] for i in range(0, min(len(filtered_df), 100), items_per_row)]
-        
+
         for row_data in rows:
             cols = st.columns(items_per_row)
             for idx, (_, item) in enumerate(row_data.iterrows()):
@@ -193,16 +196,15 @@ def render_category_table(category_df, category_name):
                     st.caption(f"{item['name'][:30]}...")
                     st.caption(f"💰 {item['used_price']:.0f} ₪")
                     st.caption(f"📅 {item['year']}")
-        
+
         if len(filtered_df) > 100:
             st.info("⚠️ Showing first 100 results in gallery view. Use table view or search to see more.")
-    
+
     else:
         # Table view
-        display_cols = ["img", "id", "name", "year", "used_price", "new_price", "used_conf", "new_conf"]
         st.dataframe(
-            filtered_df[display_cols],
-            width="stretch",
+            filtered_df[["img"] + export_cols],
+            use_container_width=True,
             hide_index=True,
             column_config={
                 "img": st.column_config.ImageColumn("Image", width="small"),
@@ -215,18 +217,17 @@ def render_category_table(category_df, category_name):
                 "new_conf": st.column_config.TextColumn("New Conf")
             }
         )
-    
-    # Export button
+
+    # Export button — uses export_cols which is always defined above
     st.divider()
-    if st.button(f"📥 Export {category_name} to CSV", key=f"export_{category_name}"):
-        csv = filtered_df[display_cols[1:]].to_csv(index=False)  # Exclude img column
-        st.download_button(
-            label="Download CSV",
-            data=csv,
-            file_name=f"superhero_{category_name.lower().replace(' ', '_')}_{pd.Timestamp.now().strftime('%Y%m%d')}.csv",
-            mime="text/csv",
-            key=f"download_{category_name}"
-        )
+    csv_data = filtered_df[export_cols].to_csv(index=False)
+    st.download_button(
+        label=f"📥 Export {category_name} to CSV",
+        data=csv_data,
+        file_name=f"superhero_{category_name.lower().replace(' ', '_')}_{pd.Timestamp.now().strftime('%Y%m%d')}.csv",
+        mime="text/csv",
+        key=f"download_{category_name}"
+    )
 
 # Render each tab
 with tab_standard:
@@ -254,3 +255,5 @@ st.divider()
 if st.button("🔄 Refresh Data"):
     st.cache_data.clear()
     st.rerun()
+
+db.close()
