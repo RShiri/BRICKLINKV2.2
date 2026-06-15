@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import json
-import sqlite3
 import os
 import time
 import logging
@@ -1157,6 +1156,10 @@ if mode == "📊 Set Analyzer Database":
 
 
 elif mode == "🔐 Ram's Collection":
+    if st.session_state.get("user_role") != "admin":
+        st.error("🔒 This page is restricted to administrators.")
+        st.stop()
+
     st.title("🔐 Ram's Collection")
     st.caption("Personal investment portfolio")
 
@@ -1179,6 +1182,12 @@ elif mode == "🔐 Ram's Collection":
         st.warning(f"📭 Ram's Collection is empty (DB has {len(_ram_ids)} IDs — items may not be scraped yet)")
         st.info("💡 Tip: Use the Set Analyzer to scan items, then they'll be automatically added to your collection")
         st.stop()
+
+    # Convert Stale boolean to visible emoji badge
+    if not df_sets.empty:
+        df_sets["Stale"] = df_sets["Stale"].map({True: "⚠️", False: ""})
+    if not df_figs.empty:
+        df_figs["Stale"] = df_figs["Stale"].map({True: "⚠️", False: ""})
     
     # Metrics
     t_new = 0
@@ -1246,6 +1255,7 @@ elif mode == "🔐 Ram's Collection":
                 column_order=["Stale", "Image", "ID", "Name", "New Price", "New Conf", "Used Price", "Profit", "Margin %", "Rating"],
                 hide_index=True,
                 column_config={
+                    "Stale": st.column_config.TextColumn("⚠️", width="small"),
                     "Image": st.column_config.ImageColumn("Img", width="small"),
                     "New Price": st.column_config.NumberColumn("New Price", format="%.2f ₪"),
                     "Used Price": st.column_config.NumberColumn("Used Price", format="%.2f ₪"),
@@ -1265,6 +1275,7 @@ elif mode == "🔐 Ram's Collection":
                 column_order=partout_cols,
                 hide_index=True,
                 column_config={
+                    "Stale": st.column_config.TextColumn("⚠️", width="small"),
                     "Image": st.column_config.ImageColumn("Img", width="small"),
                     "Part-Out Alert": st.column_config.TextColumn("Alert"),
                     "Used Price": st.column_config.NumberColumn("Used Price", format="%.2f ₪"),
@@ -1273,7 +1284,7 @@ elif mode == "🔐 Ram's Collection":
             )
 
     with tab3:
-        st.dataframe(df_sets, width="stretch", hide_index=True, column_config={"Image": st.column_config.ImageColumn()})
+        st.dataframe(df_sets, use_container_width=True, hide_index=True, column_config={"Image": st.column_config.ImageColumn()})
 
     with tab4:
         if not df_figs.empty:
@@ -1309,6 +1320,10 @@ elif mode == "🔐 Ram's Collection":
 
 
 elif mode == "🔐 Udi's Collection":
+    if st.session_state.get("user_role") != "admin":
+        st.error("🔒 This page is restricted to administrators.")
+        st.stop()
+
     st.title("🔐 Udi's Collection")
     st.caption("Personal investment portfolio")
 
@@ -1331,6 +1346,12 @@ elif mode == "🔐 Udi's Collection":
         st.warning(f"📭 Udi's Collection is empty (DB has {len(_udi_ids)} IDs — items may not be scraped yet)")
         st.info("💡 Tip: Use the Set Analyzer to scan items and add them to Udi's collection")
         st.stop()
+
+    # Convert Stale boolean to visible emoji badge
+    if not df_sets.empty:
+        df_sets["Stale"] = df_sets["Stale"].map({True: "⚠️", False: ""})
+    if not df_figs.empty:
+        df_figs["Stale"] = df_figs["Stale"].map({True: "⚠️", False: ""})
     
     # Metrics
     t_new = 0
@@ -1368,6 +1389,7 @@ elif mode == "🔐 Udi's Collection":
                 column_order=["Stale", "Image", "ID", "Name", "New Price", "New Conf", "Used Price", "Profit", "Margin %", "Rating"],
                 hide_index=True,
                 column_config={
+                    "Stale": st.column_config.TextColumn("⚠️", width="small"),
                     "Image": st.column_config.ImageColumn("Img", width="small"),
                     "New Price": st.column_config.NumberColumn("New Price", format="%.2f ₪"),
                     "Used Price": st.column_config.NumberColumn("Used Price", format="%.2f ₪"),
@@ -1379,13 +1401,14 @@ elif mode == "🔐 Udi's Collection":
     with tab2:
         st.caption("Undervalued Used Sets (High Minifig Value)")
         if not df_sets.empty:
-            df_used = df_sets[df_sets["Used Price"] > 0].sort_values("Figs %", ascending=False)
+            df_used = df_sets[df_sets["Used Price"] > 0].sort_values("Figs %", ascending=False).copy()
             st.dataframe(
                 df_used,
-                width="stretch",
+                use_container_width=True,
                 column_order=["Stale", "Image", "ID", "Name", "Part-Out Alert", "Used Price", "Used Conf", "Figs %"],
                 hide_index=True,
                 column_config={
+                    "Stale": st.column_config.TextColumn("⚠️", width="small"),
                     "Image": st.column_config.ImageColumn("Img", width="small"),
                     "Part-Out Alert": st.column_config.TextColumn("Alert"),
                     "Figs %": st.column_config.ProgressColumn("Figs %", format="%.0f%%", min_value=0, max_value=150)
@@ -1393,7 +1416,7 @@ elif mode == "🔐 Udi's Collection":
             )
 
     with tab3:
-        st.dataframe(df_sets, width="stretch", hide_index=True, column_config={"Image": st.column_config.ImageColumn()})
+        st.dataframe(df_sets, use_container_width=True, hide_index=True, column_config={"Image": st.column_config.ImageColumn()})
 
     with tab4:
         if not df_figs.empty:
