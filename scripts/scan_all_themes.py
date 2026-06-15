@@ -1,26 +1,37 @@
 """
 scan_all_themes.py — Comprehensive LEGO minifigure scraper.
+Run this on your LOCAL machine (needs Chrome + BrickLink credentials).
 
-Two complementary strategies run in order:
-  1. Catalog discovery — fetches every BrickLink minifig category page
-     (with pagination) and collects real item IDs.
-  2. Prefix-range scan — iterates known theme prefixes numerically to
-     catch items that live outside standard category pages or whose
-     catalog pages failed to load.
+Two strategies run in order:
+  1. Catalog discovery  — Crawls BrickLink's full minifig category tree
+     page-by-page to collect the real item IDs for every theme.
+     This is the primary strategy: it finds the EXACT IDs BrickLink uses
+     regardless of zero-padding, and handles all categories automatically.
 
-Run:
-    cd /home/user/BRICKLINKV2.2
-    python scripts/scan_all_themes.py               # full scan
-    python scripts/scan_all_themes.py --prefix-only # skip catalog discovery
-    python scripts/scan_all_themes.py --catalog-only
-    python scripts/scan_all_themes.py --resume      # resume from state file
+  2. Prefix-range scan — Iterates known theme prefixes numerically as a
+     backup to catch anything the catalog phase missed.
+     Uses the correct zero-padding per theme (3 vs 4 digits).
+
+Usage (run from project root):
+    python scripts/scan_all_themes.py                # full scan (recommended)
+    python scripts/scan_all_themes.py --catalog-only # only catalog discovery
+    python scripts/scan_all_themes.py --prefix-only  # only numeric range scan
+    python scripts/scan_all_themes.py --resume       # continue interrupted scan
+    python scripts/scan_all_themes.py --clear-state  # wipe saved state + start fresh
+
+Requirements (install once):
+    pip install selenium beautifulsoup4 psycopg2-binary
+    # Also need Chrome + matching chromedriver in PATH
+
+Expected runtime: 8-24 hours for a full scan (thousands of minifigs).
+Interrupt at any time with Ctrl+C — state is saved every 200 items.
+Re-run with --resume to continue.
 """
 
-import time, sys, os, json, argparse, re, logging
+import time, sys, os, json, argparse, re, random, logging
 from datetime import datetime
 from bs4 import BeautifulSoup
 
-# Allow imports from project root
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from scraper import BrickLinkScraper
 from database import Database
@@ -28,72 +39,72 @@ from database import Database
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 
 # ---------------------------------------------------------------------------
-# Theme prefix → (start, end) for numeric range scan
-# These are conservative maximums — smart gap detection stops early anyway
+# Zero-padding rules per theme prefix
+#
+# BrickLink ID format varies by theme:
+#   4-digit (sw0001, sh0001):  Star Wars, Superheroes
+#   3-digit (hp001, njo001):   everything else
+#
+# PREFIX_RANGES: prefix → (start, end, digits)
 # ---------------------------------------------------------------------------
 PREFIX_RANGES = {
-    # Licensed themes
-    "sh":   (1, 1200),   # Superheroes (Marvel + DC)
-    "sw":   (1, 2000),   # Star Wars
-    "hp":   (1, 600),    # Harry Potter / Wizarding World
-    "njo":  (1, 1000),   # Ninjago
-    "col":  (1, 700),    # Collectible Minifigures (Series 1-25+)
-    "tlm":  (1, 300),    # The LEGO Movie 1 & 2
-    "lor":  (1, 300),    # Lord of the Rings
-    "hob":  (1, 150),    # The Hobbit
-    "jw":   (1, 200),    # Jurassic World / Park
-    "iaj":  (1, 100),    # Indiana Jones
-    "poc":  (1, 120),    # Pirates of the Caribbean
-    "loc":  (1, 200),    # Legends of Chima
-    "nex":  (1, 150),    # Nexo Knights
-    "elf":  (1, 100),    # Elves
-    "frnd": (1, 400),    # Friends
-    "toy":  (1, 100),    # Toy Story
-    "sc":   (1, 100),    # Speed Champions
-    "hs":   (1, 100),    # Hidden Side
-    "mk":   (1, 250),    # Monkie Kid
-    "cty":  (1, 2000),   # City / Town
-    # Classic/older themes
-    "cas":  (1, 500),    # Castle
-    "bat":  (1, 400),    # The LEGO Batman Movie
-    "dim":  (1, 200),    # Dimensions
-    "idea": (1, 200),    # Ideas
-    "twn":  (1, 600),    # Classic Town
-    "pi":   (1, 200),    # Classic Pirates
-    "sp":   (1, 150),    # Classic Space
-    "kni":  (1, 200),    # Kingdoms
-    "adv":  (1, 150),    # Adventurers
-    "pm":   (1, 100),    # Power Miners
-    "res":  (1, 100),    # Rescue
-    "agt":  (1, 200),    # Agents
-    "atl":  (1, 100),    # Atlantis
-    "pha":  (1, 100),    # Pharaoh's Quest
-    "gal":  (1, 100),    # Galaxy Squad
-    "dis":  (1, 250),    # Disney
-    "dp":   (1, 150),    # Disney Princess
-    "ww":   (1, 150),    # Wizarding World extras
-    "hpn":  (1, 100),    # Harry Potter alternate prefix
-    "uni":  (1, 100),    # Unikitty
-    "elc":  (1, 100),    # Elves alternate prefix
-    "fst":  (1, 100),    # Fright Knights / misc Space
-    "alp":  (1, 100),    # Alpha Team
-    "rac":  (1, 100),    # Racers
-    "exo":  (1, 100),    # Exo-Force
-    "bio":  (1, 100),    # Bionicle
-    "min":  (1, 200),    # Minecraft
-    "mar":  (1, 100),    # Marvel extra
-    "dcs":  (1, 200),    # DC Super Heroes extra
+    # ── 4-digit themes ──────────────────────────────────────────────────────
+    "sw":   (1, 2000, 4),   # Star Wars          sw0001–sw2000
+    "sh":   (1, 1300, 4),   # Superheroes (all)  sh0001–sh1300
+
+    # ── 3-digit themes ──────────────────────────────────────────────────────
+    "hp":   (1, 600,  3),   # Harry Potter       hp001–hp600
+    "njo":  (1, 1000, 3),   # Ninjago            njo001–njo999
+    "col":  (1, 700,  3),   # CMF Series         col001–col700
+    "tlm":  (1, 300,  3),   # The LEGO Movie     tlm001–tlm300
+    "lor":  (1, 300,  3),   # Lord of the Rings  lor001–lor300
+    "hob":  (1, 150,  3),   # The Hobbit         hob001–hob150
+    "jw":   (1, 200,  3),   # Jurassic World     jw001–jw200
+    "iaj":  (1, 100,  3),   # Indiana Jones      iaj001–iaj100
+    "poc":  (1, 120,  3),   # Pirates Caribbean  poc001–poc120
+    "loc":  (1, 200,  3),   # Legends of Chima   loc001–loc200
+    "nex":  (1, 150,  3),   # Nexo Knights       nex001–nex150
+    "elf":  (1, 100,  3),   # Elves              elf001–elf100
+    "frnd": (1, 400,  3),   # Friends            frnd001–frnd400
+    "toy":  (1, 100,  3),   # Toy Story          toy001–toy100
+    "sc":   (1, 100,  3),   # Speed Champions    sc001–sc100
+    "hs":   (1, 100,  3),   # Hidden Side        hs001–hs100
+    "mk":   (1, 250,  3),   # Monkie Kid         mk001–mk250
+    "cty":  (1, 2000, 3),   # City / Town        cty001–cty999
+    "cas":  (1, 500,  3),   # Castle             cas001–cas500
+    "bat":  (1, 400,  3),   # Batman Movie       bat001–bat400
+    "dim":  (1, 200,  3),   # Dimensions         dim001–dim200
+    "idea": (1, 200,  3),   # Ideas              idea001–idea200
+    "twn":  (1, 600,  3),   # Classic Town       twn001–twn600
+    "pi":   (1, 200,  3),   # Classic Pirates    pi001–pi200
+    "sp":   (1, 150,  3),   # Classic Space      sp001–sp150
+    "kni":  (1, 200,  3),   # Kingdoms           kni001–kni200
+    "adv":  (1, 150,  3),   # Adventurers        adv001–adv150
+    "pm":   (1, 100,  3),   # Power Miners       pm001–pm100
+    "res":  (1, 100,  3),   # Rescue             res001–res100
+    "agt":  (1, 200,  3),   # Agents             agt001–agt200
+    "atl":  (1, 100,  3),   # Atlantis           atl001–atl100
+    "pha":  (1, 100,  3),   # Pharaoh's Quest    pha001–pha100
+    "gal":  (1, 100,  3),   # Galaxy Squad       gal001–gal100
+    "dis":  (1, 250,  3),   # Disney             dis001–dis250
+    "dp":   (1, 150,  3),   # Disney Princess    dp001–dp150
+    "uni":  (1, 100,  3),   # Unikitty           uni001–uni100
+    "alp":  (1, 100,  3),   # Alpha Team         alp001–alp100
+    "rac":  (1, 100,  3),   # Racers             rac001–rac100
+    "exo":  (1, 100,  3),   # Exo-Force          exo001–exo100
+    "min":  (1, 200,  3),   # Minecraft          min001–min200
+    "fst":  (1, 100,  3),   # Fright Knights     fst001–fst100
 }
 
-# Gap detection: skip ahead after this many consecutive 404/errors
-MAX_CONSECUTIVE_FAILURES = 40
-SKIP_AHEAD = 80
+# Gap detection
+MAX_CONSECUTIVE_FAILURES = 40  # Try 40 IDs before skipping
+SKIP_AHEAD = 80                # IDs to skip after gap detected
 
-# Seconds between scrape requests (base delay, jitter added)
-BASE_DELAY = 0.6
-JITTER = 0.4
+# Rate limiting
+BASE_DELAY   = 0.6  # seconds between requests
+JITTER       = 0.4  # random extra 0–0.4 s
 
-# State file for resume support
+# State file for resume
 STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scan_state.json")
 
 
@@ -102,7 +113,6 @@ STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scan_stat
 # ---------------------------------------------------------------------------
 
 def _is_fresh(cached_item, max_days: int = 30) -> bool:
-    """True if the item was scraped within max_days."""
     if not cached_item or "error" in cached_item:
         return False
     ts = (cached_item.get("meta", {}).get("timestamp") or
@@ -110,17 +120,14 @@ def _is_fresh(cached_item, max_days: int = 30) -> bool:
     if not ts:
         return False
     try:
-        last_date = datetime.fromisoformat(ts.split("T")[0])
+        last_date = datetime.fromisoformat(str(ts).split("T")[0])
         return (datetime.now() - last_date).days < max_days
     except Exception:
-        return True  # Unparseable timestamp → assume fresh to avoid re-scrape
+        return True
 
 
 def _scrape_one(scraper, db, item_id: str, counters: dict) -> str:
-    """
-    Scrape a single minifig.  Returns: 'cached' | 'scraped' | 'error'.
-    Updates counters in-place.
-    """
+    """Scrape one item. Returns 'cached' | 'scraped' | 'error'."""
     cached_item = db.get_item(item_id)
     if _is_fresh(cached_item):
         counters["cached"] += 1
@@ -139,10 +146,9 @@ def _scrape_one(scraper, db, item_id: str, counters: dict) -> str:
         return "error"
 
 
-def _status_line(item_id, counters, extra=""):
+def _status(item_id, c, extra=""):
     sys.stdout.write(
-        f"\r  {item_id:<14} | "
-        f"💾 {counters['cached']}  🌐 {counters['scraped']}  ❌ {counters['errors']}  {extra}   "
+        f"\r  {item_id:<14}  💾{c['cached']}  🌐{c['scraped']}  ❌{c['errors']}  {extra}   "
     )
     sys.stdout.flush()
 
@@ -166,42 +172,32 @@ def _save_state(state: dict):
 
 
 # ---------------------------------------------------------------------------
-# Strategy 1: Catalog Discovery (with pagination)
+# Phase 1 — Catalog discovery (finds exact BrickLink IDs with pagination)
 # ---------------------------------------------------------------------------
 
-import random  # needed for jitter — import after stdlib section for clarity
-
-
 def discover_categories(driver) -> dict:
-    """
-    Fetch BrickLink catalog tree and return {cat_id: category_name}.
-    """
-    print("\n🔍  Discovering minifig categories from BrickLink catalog tree...")
-    url = "https://www.bricklink.com/catalogTree.asp?itemType=M"
-    driver.get(url)
+    """Return {cat_id: category_name} from BrickLink's minifig catalog tree."""
+    print("\n🔍  Discovering categories from BrickLink catalog tree…")
+    driver.get("https://www.bricklink.com/catalogTree.asp?itemType=M")
     time.sleep(3)
 
     soup = BeautifulSoup(driver.page_source, "html.parser")
-    categories = {}
+    cats = {}
     for link in soup.find_all("a", href=re.compile(r"catID=\d+")):
         m = re.search(r"catID=(\d+)", link.get("href", ""))
-        if m:
-            cat_id = m.group(1)
-            name = link.get_text(strip=True)
-            if name:
-                categories[cat_id] = name
+        name = link.get_text(strip=True)
+        if m and name:
+            cats[m.group(1)] = name
 
-    print(f"  Found {len(categories)} categories.")
-    return categories
+    print(f"  Found {len(cats)} categories.")
+    return cats
 
 
-def get_category_items(driver, cat_id: str, cat_name: str) -> list:
-    """
-    Scrape ALL pages of a category listing, return list of item IDs.
-    Handles BrickLink pagination: ?pg=1, ?pg=2, ...
-    """
+def get_category_items_all_pages(driver, cat_id: str, cat_name: str) -> list:
+    """Scrape every page of a category listing and return real item IDs."""
     item_ids = []
     page = 1
+
     while True:
         url = (f"https://www.bricklink.com/catalogList.asp"
                f"?catType=M&catID={cat_id}&pg={page}")
@@ -210,32 +206,27 @@ def get_category_items(driver, cat_id: str, cat_name: str) -> list:
             time.sleep(2)
             soup = BeautifulSoup(driver.page_source, "html.parser")
 
-            # Item links look like href="...?M=sw0001" or "catalogitem.page?M=..."
-            found_on_page = []
+            found = []
             for link in soup.find_all("a", href=re.compile(r"[?&]M=")):
-                href = link.get("href", "")
-                m = re.search(r"[?&]M=([A-Za-z0-9\-]+)", href)
+                m = re.search(r"[?&]M=([A-Za-z0-9\-]+)", link.get("href", ""))
                 if m:
                     mid = m.group(1)
-                    if mid not in item_ids:
-                        found_on_page.append(mid)
+                    if mid not in item_ids and mid not in found:
+                        found.append(mid)
 
-            if not found_on_page:
-                break  # No more items on this page → done
+            if not found:
+                break  # empty page → done
 
-            item_ids.extend(found_on_page)
-            print(f"      Page {page}: +{len(found_on_page)} items  (total so far: {len(item_ids)})")
+            item_ids.extend(found)
+            print(f"      Page {page}: +{len(found)} items  (running total: {len(item_ids)})")
 
-            # Check if there is a "next page" link before fetching it
-            next_link = soup.find("a", string=re.compile(r"Next", re.I))
-            if not next_link:
-                # Also check for numeric page link higher than current page
-                has_next = any(
-                    re.search(rf"pg={page+1}", a.get("href", ""))
-                    for a in soup.find_all("a", href=True)
-                )
-                if not has_next:
-                    break
+            # Check for a next-page link
+            has_next = any(
+                re.search(rf"pg={page + 1}", a.get("href", ""))
+                for a in soup.find_all("a", href=True)
+            )
+            if not has_next:
+                break
 
             page += 1
             time.sleep(1)
@@ -247,94 +238,94 @@ def get_category_items(driver, cat_id: str, cat_name: str) -> list:
     return item_ids
 
 
-def run_catalog_phase(scraper, db, state: dict, counters_total: dict):
-    """Phase 1: catalog-discovery scan."""
+def run_catalog_phase(scraper, db, state: dict, totals: dict):
     print("\n" + "=" * 70)
-    print("PHASE 1 — CATALOG DISCOVERY")
+    print("  PHASE 1 — CATALOG DISCOVERY")
     print("=" * 70)
 
     driver = scraper._init_driver()
     categories = discover_categories(driver)
-
     if not categories:
-        print("  ❌ No categories found. Skipping catalog phase.")
+        print("  ❌ No categories found, skipping phase 1.")
         return
 
-    already_done_cats = set(state.get("completed_categories", []))
-    all_discovered_ids = set(state.get("discovered_ids", []))
+    done_cats  = set(state.get("completed_categories", []))
+    all_seen   = set(state.get("discovered_ids", []))
 
     for cat_id, cat_name in sorted(categories.items(), key=lambda x: x[1]):
-        if cat_id in already_done_cats:
-            print(f"  ⏭️   {cat_name} (already done)")
+        if cat_id in done_cats:
+            print(f"  ⏭️   {cat_name}  (already done)")
             continue
 
-        print(f"\n  📦  {cat_name} (cat_id={cat_id})")
-        item_ids = get_category_items(driver, cat_id, cat_name)
-        new_ids = [i for i in item_ids if i not in all_discovered_ids]
-        print(f"      {len(item_ids)} items found, {len(new_ids)} new")
+        print(f"\n  📦  {cat_name}  (catID={cat_id})")
+        item_ids = get_category_items_all_pages(driver, cat_id, cat_name)
+        new_ids  = [i for i in item_ids if i not in all_seen]
+        print(f"      {len(item_ids)} items found, {len(new_ids)} new to scrape")
 
         counters = {"cached": 0, "scraped": 0, "errors": 0}
         for item_id in new_ids:
-            _status_line(item_id, counters)
+            _status(item_id, counters)
             result = _scrape_one(scraper, db, item_id, counters)
             if result == "scraped":
                 name = (db.get_item(item_id) or {}).get("meta", {}).get("item_name", "?")
                 print(f"\n    ✨  {item_id} — {name}")
-            all_discovered_ids.add(item_id)
+            all_seen.add(item_id)
 
-        print(f"\n      Summary: 💾 {counters['cached']}  🌐 {counters['scraped']}  ❌ {counters['errors']}")
-        for k in counters_total:
-            counters_total[k] += counters[k]
+        print(f"\n      Summary: 💾{counters['cached']}  🌐{counters['scraped']}  ❌{counters['errors']}")
+        for k in totals:
+            totals[k] += counters[k]
 
-        already_done_cats.add(cat_id)
-        state["completed_categories"] = list(already_done_cats)
-        state["discovered_ids"] = list(all_discovered_ids)
+        done_cats.add(cat_id)
+        state["completed_categories"] = list(done_cats)
+        state["discovered_ids"] = list(all_seen)
         _save_state(state)
 
     print("\n✅  Catalog phase complete.")
 
 
 # ---------------------------------------------------------------------------
-# Strategy 2: Prefix-Range Scan
+# Phase 2 — Prefix-range scan (numeric backup with correct padding)
 # ---------------------------------------------------------------------------
 
-def run_prefix_phase(scraper, db, state: dict, counters_total: dict):
-    """Phase 2: numeric prefix-range scan."""
+def run_prefix_phase(scraper, db, state: dict, totals: dict):
     print("\n" + "=" * 70)
-    print("PHASE 2 — PREFIX-RANGE SCAN")
+    print("  PHASE 2 — PREFIX-RANGE SCAN")
     print("=" * 70)
     print(f"  {len(PREFIX_RANGES)} prefixes configured\n")
 
-    completed_prefixes = set(state.get("completed_prefixes", []))
-    prefix_position = state.get("prefix_position", {})  # {prefix: last_num}
+    done_pfx   = set(state.get("completed_prefixes", []))
+    pfx_pos    = state.get("prefix_position", {})   # {prefix: last_num_checked}
 
-    for prefix, (start, end) in PREFIX_RANGES.items():
-        if prefix in completed_prefixes:
-            print(f"  ⏭️   {prefix.upper()} (already done)")
+    for prefix, (start, end, digits) in PREFIX_RANGES.items():
+        if prefix in done_pfx:
+            print(f"  ⏭️   {prefix.upper()}  (already done)")
             continue
 
-        resume_at = prefix_position.get(prefix, start)
-        print(f"\n  🎨  {prefix.upper()}  (#{resume_at}–{end})")
+        resume_at = pfx_pos.get(prefix, start)
+        fmt = f"{{:0{digits}d}}"   # e.g. "{:04d}" or "{:03d}"
+        print(f"\n  🎨  {prefix.upper()}  "
+              f"(#{prefix}{fmt.format(resume_at)} – {prefix}{fmt.format(end)}, {digits}-digit)")
 
         counters = {"cached": 0, "scraped": 0, "errors": 0}
-        consecutive_failures = 0
+        consecutive = 0
         num = resume_at
 
         while num <= end:
-            item_id = f"{prefix}{num:04d}"
-            _status_line(item_id, counters, f"[{num}/{end}]")
+            item_id = f"{prefix}{fmt.format(num)}"
+            _status(item_id, counters, f"[{num}/{end}]")
 
             result = _scrape_one(scraper, db, item_id, counters)
 
             if result == "error":
-                consecutive_failures += 1
-                if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
-                    print(f"\n    ⚠️   {MAX_CONSECUTIVE_FAILURES} consecutive failures — skipping {SKIP_AHEAD} IDs")
+                consecutive += 1
+                if consecutive >= MAX_CONSECUTIVE_FAILURES:
+                    print(f"\n    ⚠️  {MAX_CONSECUTIVE_FAILURES} consecutive misses — "
+                          f"skipping {SKIP_AHEAD} IDs")
                     num += SKIP_AHEAD
-                    consecutive_failures = 0
+                    consecutive = 0
                     continue
             else:
-                consecutive_failures = 0
+                consecutive = 0
                 if result == "scraped":
                     name = (db.get_item(item_id) or {}).get("meta", {}).get("item_name", "?")
                     print(f"\n    ✨  {item_id} — {name}")
@@ -343,19 +334,18 @@ def run_prefix_phase(scraper, db, state: dict, counters_total: dict):
 
             # Checkpoint every 200 items
             if num % 200 == 0:
-                prefix_position[prefix] = num
-                state["prefix_position"] = prefix_position
+                pfx_pos[prefix] = num
+                state["prefix_position"] = pfx_pos
                 _save_state(state)
 
-        print(f"\n      Summary: 💾 {counters['cached']}  🌐 {counters['scraped']}  ❌ {counters['errors']}")
-        for k in counters_total:
-            counters_total[k] += counters[k]
+        print(f"\n      Summary: 💾{counters['cached']}  🌐{counters['scraped']}  ❌{counters['errors']}")
+        for k in totals:
+            totals[k] += counters[k]
 
-        completed_prefixes.add(prefix)
-        state["completed_prefixes"] = list(completed_prefixes)
-        if prefix in prefix_position:
-            del prefix_position[prefix]
-        state["prefix_position"] = prefix_position
+        done_pfx.add(prefix)
+        state["completed_prefixes"] = list(done_pfx)
+        pfx_pos.pop(prefix, None)
+        state["prefix_position"] = pfx_pos
         _save_state(state)
 
     print("\n✅  Prefix-range phase complete.")
@@ -366,14 +356,16 @@ def run_prefix_phase(scraper, db, state: dict, counters_total: dict):
 # ---------------------------------------------------------------------------
 
 def main():
-    parser = argparse.ArgumentParser(description="Comprehensive LEGO minifig scraper")
-    parser.add_argument("--catalog-only", action="store_true",
-                        help="Only run catalog discovery phase")
-    parser.add_argument("--prefix-only", action="store_true",
-                        help="Only run prefix-range phase")
-    parser.add_argument("--resume", action="store_true",
-                        help="Resume from saved state (default: start fresh)")
-    parser.add_argument("--clear-state", action="store_true",
+    parser = argparse.ArgumentParser(
+        description="Comprehensive LEGO minifig scraper — run on your local machine."
+    )
+    parser.add_argument("--catalog-only",  action="store_true",
+                        help="Only run Phase 1 (catalog discovery)")
+    parser.add_argument("--prefix-only",   action="store_true",
+                        help="Only run Phase 2 (numeric prefix scan)")
+    parser.add_argument("--resume",        action="store_true",
+                        help="Resume from saved scan_state.json")
+    parser.add_argument("--clear-state",   action="store_true",
                         help="Delete saved state and start fresh")
     args = parser.parse_args()
 
@@ -383,12 +375,14 @@ def main():
     print("=" * 70)
     print("  COMPREHENSIVE LEGO MINIFIGURE SCRAPER")
     print("=" * 70)
-    print(f"  Strategies: {'Catalog' if not args.prefix_only else ''}"
-          f"{'/' if not args.catalog_only and not args.prefix_only else ''}"
-          f"{'Prefix-range' if not args.catalog_only else ''}")
-    print(f"  Cache freshness: 30 days")
-    print(f"  Request delay:   {BASE_DELAY}–{BASE_DELAY+JITTER:.1f}s")
-    print(f"  Gap detection:   skip {SKIP_AHEAD} after {MAX_CONSECUTIVE_FAILURES} failures")
+    phases = "Catalog + Prefix-range"
+    if args.catalog_only:  phases = "Catalog only"
+    if args.prefix_only:   phases = "Prefix-range only"
+    print(f"  Phases:   {phases}")
+    print(f"  Padding:  4-digit for sw/sh, 3-digit for all other themes")
+    print(f"  Cache:    skip items scraped in last 30 days")
+    print(f"  Delay:    {BASE_DELAY}–{BASE_DELAY+JITTER:.1f} s per request")
+    print(f"  Gap skip: {SKIP_AHEAD} IDs after {MAX_CONSECUTIVE_FAILURES} consecutive failures")
 
     if args.clear_state and os.path.exists(STATE_FILE):
         os.remove(STATE_FILE)
@@ -396,56 +390,53 @@ def main():
 
     state = _load_state() if args.resume else {}
     if state:
-        print(f"\n  ▶️   Resuming from saved state "
-              f"({len(state.get('completed_categories', []))} cats done, "
-              f"{len(state.get('completed_prefixes', []))} prefixes done)")
+        print(f"\n  ▶️   Resuming — "
+              f"{len(state.get('completed_categories', []))} categories done, "
+              f"{len(state.get('completed_prefixes', []))} prefixes done")
 
-    print("\n  Press ENTER to start (Ctrl+C to stop and save progress)...")
+    print("\n  Press ENTER to start  (Ctrl+C saves state and stops cleanly)…")
     input()
 
     db = Database()
     scraper = BrickLinkScraper()
-    counters_total = {"cached": 0, "scraped": 0, "errors": 0}
-    start_time = time.time()
+    totals = {"cached": 0, "scraped": 0, "errors": 0}
+    t0 = time.time()
 
     try:
         if not args.prefix_only:
-            run_catalog_phase(scraper, db, state, counters_total)
-
+            run_catalog_phase(scraper, db, state, totals)
         if not args.catalog_only:
-            run_prefix_phase(scraper, db, state, counters_total)
+            run_prefix_phase(scraper, db, state, totals)
 
     except KeyboardInterrupt:
-        print("\n\n  🛑  Scan interrupted — progress saved to scan_state.json")
-        print("     Re-run with --resume to continue from where you left off.")
+        print("\n\n  🛑  Stopped — progress saved to scan_state.json")
+        print("     Re-run with --resume to continue.")
     finally:
         scraper.close()
         db.close()
-        elapsed = time.time() - start_time
-        total = counters_total["cached"] + counters_total["scraped"]
+        elapsed = time.time() - t0
+        total = totals["cached"] + totals["scraped"]
 
         print("\n\n" + "=" * 70)
         print("  SCAN SUMMARY")
         print("=" * 70)
-        print(f"  ⏱️   Time:    {elapsed/60:.1f} min  ({elapsed/3600:.2f} h)")
-        print(f"  💾  Cached:  {counters_total['cached']:,}")
-        print(f"  🌐  Scraped: {counters_total['scraped']:,}")
-        print(f"  ❌  Errors:  {counters_total['errors']:,}")
-        print(f"  📦  Total:   {total:,} minifigures")
+        print(f"  ⏱️   Time:     {elapsed/60:.1f} min  ({elapsed/3600:.2f} h)")
+        print(f"  💾  Cached:   {totals['cached']:,}  (already in DB)")
+        print(f"  🌐  Scraped:  {totals['scraped']:,}  (newly added)")
+        print(f"  ❌  Errors:   {totals['errors']:,}  (not found / failed)")
+        print(f"  📦  Total:    {total:,}  minifigures processed")
         print("=" * 70)
 
-        if counters_total["scraped"] > 0:
-            print(f"\n  ✅  {counters_total['scraped']:,} new minifigures added to database!")
-        print("  💡  View results in the category pages on the dashboard.\n")
+        if totals["scraped"]:
+            print(f"\n  ✅  {totals['scraped']:,} new minifigures added to your database!")
+        print("  💡  Open the dashboard and browse any category page to see results.\n")
 
-        if os.path.exists(STATE_FILE) and not state.get("completed_prefixes"):
-            # If nothing left to do, clean up state file
+        # Clean up state file if fully done
+        if (len(state.get("completed_prefixes", [])) == len(PREFIX_RANGES)
+                and not args.catalog_only):
             try:
-                done_cats = len(state.get("completed_categories", []))
-                done_pfx = len(state.get("completed_prefixes", []))
-                if done_pfx == len(PREFIX_RANGES):
-                    os.remove(STATE_FILE)
-                    print("  🗑️   State file cleaned up (scan fully complete).")
+                os.remove(STATE_FILE)
+                print("  🗑️   State file removed (scan fully complete).")
             except Exception:
                 pass
 
