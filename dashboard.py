@@ -1175,6 +1175,20 @@ elif mode == "🔐 Ram's Collection":
     if not df_figs.empty:
         df_figs = df_figs[df_figs["ID"].str.lower().isin(_ram_ids)].copy()
 
+    # Debug diagnostics
+    with st.expander("🔍 Debug Info", expanded=(df_sets.empty and df_figs.empty)):
+        st.write(f"**Collection IDs in DB:** {len(_ram_ids)}")
+        st.write(f"**Total sets in items table (before filter):** {len(load_data(cache_key)[0])}")
+        st.write(f"**Total figs in items table (before filter):** {len(load_data(cache_key)[1])}")
+        st.write(f"**Sets after collection filter:** {len(df_sets)}")
+        st.write(f"**Figs after collection filter:** {len(df_figs)}")
+        if _ram_ids:
+            sample = list(_ram_ids)[:5]
+            st.write(f"**Sample collection IDs:** {sample}")
+        _raw_sets, _raw_figs = load_data(cache_key)
+        if not _raw_sets.empty:
+            st.write(f"**Sample item IDs in DB:** {list(_raw_sets['ID'].head(5))}")
+
     # Check if collection is empty
     if df_sets.empty and df_figs.empty:
         st.warning(f"📭 Ram's Collection is empty (DB has {len(_ram_ids)} IDs — items may not be scraped yet)")
