@@ -23,7 +23,6 @@
       },
       "package": "com.bricksniper.app"
     },
-    "assetBundlePatterns": ["**/*"],
-    "plugins": ["expo-router"]
+    "assetBundlePatterns": ["**/*"]
   }
 }
