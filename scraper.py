@@ -36,7 +36,15 @@ class BrickLinkScraper:
         chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
         chrome_options.add_experimental_option('useAutomationExtension', False)
         
-        self.driver = webdriver.Chrome(options=chrome_options)
+        try:
+            from webdriver_manager.chrome import ChromeDriverManager
+            from selenium.webdriver.chrome.service import Service
+            self.driver = webdriver.Chrome(
+                service=Service(ChromeDriverManager().install()),
+                options=chrome_options
+            )
+        except ImportError:
+            self.driver = webdriver.Chrome(options=chrome_options)
         self.driver.set_page_load_timeout(30)
         
         # Establish session first to prevent catalog item redirects
