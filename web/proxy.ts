@@ -1,13 +1,14 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase/env";
 
 const PROTECTED = ["/collection", "/tools", "/admin"];
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const url = SUPABASE_URL;
+  const key = SUPABASE_KEY;
   if (!url || !key) return response;
 
   const supabase = createServerClient(url, key, {

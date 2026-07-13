@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Item } from "@/lib/types";
 import { blImageUrl, ils } from "@/lib/format";
 import { DealBadge } from "@/components/Badges";
+import { ItemImage } from "@/components/ItemImage";
 
 export function itemHref(item: Pick<Item, "item_id" | "item_type">): string {
   return item.item_type === "set"
@@ -16,9 +17,7 @@ export function ItemCard({ item }: { item: Item }) {
       className="group flex flex-col rounded border border-edge bg-surface p-3 transition-shadow hover:shadow-md"
     >
       <div className="mb-2 flex h-28 items-center justify-center overflow-hidden rounded bg-white">
-        {/* BrickLink CDN images have unknown dimensions; plain img keeps this simple */}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
+        <ItemImage
           src={blImageUrl(item.item_id)}
           alt={item.name ?? item.item_id}
           loading="lazy"

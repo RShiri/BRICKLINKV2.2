@@ -13,6 +13,7 @@ import { PriceGuideTable } from "@/components/PriceGuideTable";
 import { PriceHistoryChart } from "@/components/PriceHistoryChart";
 import { DealBadge, ConfidencePill, LifecycleBadge } from "@/components/Badges";
 import { CollectionButton } from "@/components/CollectionButton";
+import { ItemImage } from "@/components/ItemImage";
 import { isInMyCollection } from "@/lib/queries/collections";
 import { blCatalogUrl, blImageUrl, ils, pct, shortDate } from "@/lib/format";
 
@@ -55,9 +56,8 @@ export default async function MinifigPage({ params }: { params: Promise<Params> 
       <div className="flex flex-col gap-6 lg:flex-row">
         <div className="w-full shrink-0 lg:w-64">
           <div className="flex h-56 items-center justify-center rounded border border-edge bg-white p-2">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={blId ? blImageUrl(blId) : (catalogFig?.img_url ?? "")}
+            <ItemImage
+              src={blId ? blImageUrl(blId) : catalogFig?.img_url}
               alt={name}
               className="max-h-full max-w-full object-contain"
             />

@@ -12,6 +12,7 @@ import { PriceGuideTable } from "@/components/PriceGuideTable";
 import { PriceHistoryChart } from "@/components/PriceHistoryChart";
 import { DealBadge, ConfidencePill, LifecycleBadge } from "@/components/Badges";
 import { CollectionButton } from "@/components/CollectionButton";
+import { ItemImage } from "@/components/ItemImage";
 import { isInMyCollection } from "@/lib/queries/collections";
 import { blCatalogUrl, blImageUrl, ils, num, pct, shortDate } from "@/lib/format";
 
@@ -63,8 +64,7 @@ export default async function SetPage({ params }: { params: Promise<Params> }) {
         {/* Image + specs */}
         <div className="w-full shrink-0 lg:w-72">
           <div className="flex h-56 items-center justify-center rounded border border-edge bg-white p-2">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
+            <ItemImage
               src={catalogSet?.img_url ?? blImageUrl(blId)}
               alt={name}
               className="max-h-full max-w-full object-contain"
@@ -207,9 +207,8 @@ export default async function SetPage({ params }: { params: Promise<Params> }) {
                       <tr key={fig.fig_num}>
                         <td className="w-14">
                           <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded bg-white">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={fig.bl_id ? blImageUrl(fig.bl_id) : (fig.img_url ?? "")}
+                            <ItemImage
+                              src={fig.bl_id ? blImageUrl(fig.bl_id) : fig.img_url}
                               alt=""
                               loading="lazy"
                               className="max-h-full max-w-full object-contain"
