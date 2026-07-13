@@ -5,6 +5,18 @@
 
 ---
 
+## 🚀 V3: BrickSniper Web (new)
+
+The platform is being rebuilt as a full website with a BrickLink-style UI —
+see **[`web/`](web/)** (Next.js + Tailwind + Supabase) and **[`etl/`](etl/)**
+(Rebrickable catalog import, BrickLink↔Rebrickable ID mapping, scrape-job
+worker). The Streamlit app below keeps running until the web app reaches
+parity. Deployment steps: [`docs/DEPLOY_WEB.md`](docs/DEPLOY_WEB.md).
+**Before anything else, read [`SECURITY.md`](SECURITY.md) and rotate the
+database credentials.**
+
+---
+
 ## Overview
 
 BrickLink Sniper is a web application that helps LEGO collectors and investors make data-driven buy/sell decisions. It scrapes live pricing data from BrickLink, applies statistical filtering to compute fair market values, identifies profitable "sniper" deals, and tracks personal collections — all through an interactive Streamlit dashboard.
