@@ -1,26 +1,95 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* BrickLink-inspired design tokens (light) */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bl-navy: #1e3a5f;
+  --bl-navy-deep: #14293f;
+  --bl-blue: #0057a6;
+  --bl-link: #1d6fc4;
+  --bl-yellow: #ffc700;
+  --bl-yellow-hover: #e6b400;
+  --surface: #ffffff;
+  --surface-2: #f5f7fa;
+  --table-stripe: #f7f9fc;
+  --table-head: #e9eef4;
+  --border: #d9e1ea;
+  --text: #1a2433;
+  --text-muted: #5b6b7f;
+  --guide-new: #fffbea;
+  --guide-used: #f0f6ff;
+}
+
+.dark {
+  --bl-navy: #0f1e33;
+  --bl-navy-deep: #0a1626;
+  --bl-blue: #2f7fd0;
+  --bl-link: #6fb1ff;
+  --surface: #111826;
+  --surface-2: #0d131f;
+  --table-stripe: #16202e;
+  --table-head: #1e2a3a;
+  --border: #2a3648;
+  --text: #e6edf5;
+  --text-muted: #93a4b8;
+  --guide-new: #2a2610;
+  --guide-used: #101f33;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-navy: var(--bl-navy);
+  --color-navy-deep: var(--bl-navy-deep);
+  --color-blue: var(--bl-blue);
+  --color-link: var(--bl-link);
+  --color-yellow: var(--bl-yellow);
+  --color-yellow-hover: var(--bl-yellow-hover);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-stripe: var(--table-stripe);
+  --color-thead: var(--table-head);
+  --color-edge: var(--border);
+  --color-ink: var(--text);
+  --color-ink-muted: var(--text-muted);
+  --color-guide-new: var(--guide-new);
+  --color-guide-used: var(--guide-used);
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  color-scheme: light;
+}
+html.dark {
+  color-scheme: dark;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Dense data tables */
+.table-dense {
+  font-size: 13px;
+}
+.table-dense th {
+  background: var(--table-head);
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+  padding: 6px 10px;
+  text-align: left;
+  white-space: nowrap;
+}
+.table-dense td {
+  border-bottom: 1px solid var(--border);
+  padding: 6px 10px;
+  vertical-align: middle;
+}
+.table-dense tbody tr:nth-child(even) {
+  background: var(--table-stripe);
+}
+.table-dense tbody tr:hover {
+  background: color-mix(in srgb, var(--bl-link) 8%, transparent);
 }
