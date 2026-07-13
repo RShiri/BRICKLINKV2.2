@@ -1,26 +1,93 @@
 @import "tailwindcss";
 
+/*
+ * BrickSniper design system.
+ *
+ * The UI is built on a small set of semantic color tokens (navy header,
+ * yellow accent, surface/edge/ink neutrals). Values live as CSS variables on
+ * :root and are re-declared under `.dark` so next-themes can flip the whole
+ * palette by toggling the `.dark` class on <html>. `@theme inline` exposes
+ * each variable to Tailwind so utilities like `bg-navy`, `text-ink-muted`,
+ * and `border-edge` resolve to the live variable and follow the active theme.
+ */
+
+/* Drive the `dark:` variant off next-themes' class, not prefers-color-scheme. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
+  /* Brand */
+  --navy: #0a2540;
+  --navy-deep: #06182b;
+  --yellow: #ffbe00;
+  --yellow-hover: #ecab00;
+
+  /* Neutrals */
   --background: #ffffff;
-  --foreground: #171717;
+  --surface: #f7f8fa;
+  --surface-2: #eef1f5;
+  --edge: #e2e6ec;
+  --thead: #eef1f5;
+  --ink: #10202e;
+  --ink-muted: #5b6b7b;
+  --link: #0a66c2;
+
+  /* Price-guide condition tints */
+  --guide-new: #e9f7ee;
+  --guide-used: #eaf1fb;
+
+  --foreground: var(--ink);
+}
+
+.dark {
+  --navy: #0a1c30;
+  --navy-deep: #030d18;
+  --yellow: #ffc41f;
+  --yellow-hover: #ffd24d;
+
+  --background: #0b0f14;
+  --surface: #141a22;
+  --surface-2: #1b222c;
+  --edge: #263140;
+  --thead: #1b222c;
+  --ink: #e7ecf2;
+  --ink-muted: #93a1b1;
+  --link: #5aa9ee;
+
+  --guide-new: #10241a;
+  --guide-used: #10202f;
+
+  --foreground: var(--ink);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+
+  --color-navy: var(--navy);
+  --color-navy-deep: var(--navy-deep);
+  --color-yellow: var(--yellow);
+  --color-yellow-hover: var(--yellow-hover);
+
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-edge: var(--edge);
+  --color-thead: var(--thead);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-muted: var(--ink-muted);
+  --color-link: var(--link);
+
+  --color-guide-new: var(--guide-new);
+  --color-guide-used: var(--guide-used);
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  color-scheme: light dark;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
 }
