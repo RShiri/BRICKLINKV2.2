@@ -2,10 +2,12 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import {
   getCatalogSet,
+  getInventoryParts,
   getItem,
   getSetMinifigs,
   getThemePath,
 } from "@/lib/queries/catalog";
+import { PartsTable } from "@/components/PartsTable";
 import { getPriceHistory } from "@/lib/queries/prices";
 import { Breadcrumbs, type Crumb } from "@/components/Breadcrumbs";
 import { PriceGuideTable } from "@/components/PriceGuideTable";
@@ -32,12 +34,13 @@ export default async function SetPage({ params }: { params: Promise<Params> }) {
   const setNum = decodeURIComponent(raw);
   const blId = setNum.replace(/-1$/, "");
 
-  const [item, catalogSet, minifigs, history, inCollection] = await Promise.all([
+  const [item, catalogSet, minifigs, history, inCollection, parts] = await Promise.all([
     getItem(blId).then((i) => i ?? getItem(setNum)),
     getCatalogSet(setNum),
     getSetMinifigs(setNum),
     getPriceHistory(blId, 90),
     isInMyCollection(blId),
+    getInventoryParts(setNum),
   ]);
 
   const themePath = await getThemePath(catalogSet?.theme_id ?? null);
@@ -245,6 +248,16 @@ export default async function SetPage({ params }: { params: Promise<Params> }) {
                   </tbody>
                 </table>
               </div>
+            </section>
+          )}
+
+          {/* Part inventory */}
+          {parts.length > 0 && (
+            <section className="mt-6">
+              <h2 className="mb-2 text-base font-bold">
+                Parts ({num(parts.filter((p) => !p.is_spare).reduce((s, p) => s + p.quantity, 0))})
+              </h2>
+              <PartsTable parts={parts} />
             </section>
           )}
         </div>

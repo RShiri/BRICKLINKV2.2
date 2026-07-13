@@ -181,6 +181,68 @@ export async function getSetMinifigs(setNum: string): Promise<SetMinifigEntry[]>
   });
 }
 
+export type SetPartEntry = {
+  part_num: string;
+  color_id: number;
+  quantity: number;
+  is_spare: boolean;
+  img_url: string | null;
+  name: string;
+  color_name: string;
+  color_rgb: string | null;
+};
+
+/**
+ * Part inventory for a set or minifig (Rebrickable models fig inventories
+ * as set_num = "fig-…"). No FKs exist from inventory_parts to
+ * catalog_parts/colors, so names and colors are stitched in manually.
+ */
+export async function getInventoryParts(refNum: string): Promise<SetPartEntry[]> {
+  const sb = supabasePublic();
+  if (!sb) return [];
+  const rbNum = refNum.includes("-") ? refNum : `${refNum}-1`;
+
+  const { data: inv } = await sb
+    .from("inventories")
+    .select("id")
+    .eq("set_num", rbNum)
+    .order("version", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!inv) return [];
+
+  const { data: rows } = await sb
+    .from("inventory_parts")
+    .select("part_num, color_id, quantity, is_spare, img_url")
+    .eq("inventory_id", inv.id)
+    .order("is_spare", { ascending: true })
+    .order("quantity", { ascending: false })
+    .limit(3000);
+  if (!rows?.length) return [];
+
+  const partNums = [...new Set(rows.map((r) => r.part_num))];
+  const nameByPart = new Map<string, string>();
+  // .in() lists go through the URL; chunk to stay under length limits.
+  for (let i = 0; i < partNums.length; i += 200) {
+    const { data: parts } = await sb
+      .from("catalog_parts")
+      .select("part_num, name")
+      .in("part_num", partNums.slice(i, i + 200));
+    for (const p of parts ?? []) nameByPart.set(p.part_num, p.name);
+  }
+
+  const colorIds = [...new Set(rows.map((r) => r.color_id))];
+  const { data: colors } = await sb.from("colors").select("id, name, rgb").in("id", colorIds);
+  const colorById = new Map((colors ?? []).map((c) => [c.id, c]));
+
+  return rows.map((r) => ({
+    ...r,
+    name: nameByPart.get(r.part_num) ?? r.part_num,
+    color_name: colorById.get(r.color_id)?.name ?? "—",
+    color_rgb: colorById.get(r.color_id)?.rgb ?? null,
+  }));
+}
+
 /** Sets a minifig appears in (reverse inventory lookup). */
 export async function getFigAppearsIn(figNum: string): Promise<CatalogSet[]> {
   const sb = supabasePublic();

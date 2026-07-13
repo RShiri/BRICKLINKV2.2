@@ -91,3 +91,34 @@ body {
   background: var(--background);
   color: var(--foreground);
 }
+
+/*
+ * Dense data tables (catalog listings, price guide, part inventories).
+ * Lives in the components layer so Tailwind utilities (text-right, w-14)
+ * used in the markup still win the cascade.
+ */
+@layer components {
+  .table-dense {
+    font-size: 13px;
+    border-collapse: collapse;
+  }
+  .table-dense :where(th) {
+    background: var(--thead);
+    color: var(--ink-muted);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    text-align: left;
+    padding: 6px 10px;
+    white-space: nowrap;
+  }
+  .table-dense :where(td) {
+    padding: 6px 10px;
+    border-top: 1px solid var(--edge);
+    vertical-align: middle;
+  }
+  .table-dense :where(tbody tr):hover {
+    background: var(--surface-2);
+  }
+}

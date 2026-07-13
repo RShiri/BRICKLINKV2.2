@@ -4,9 +4,11 @@ import {
   blIdFor,
   getCatalogMinifig,
   getFigAppearsIn,
+  getInventoryParts,
   getItem,
   rbIdFor,
 } from "@/lib/queries/catalog";
+import { PartsTable } from "@/components/PartsTable";
 import { getPriceHistory } from "@/lib/queries/prices";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { PriceGuideTable } from "@/components/PriceGuideTable";
@@ -37,12 +39,13 @@ export default async function MinifigPage({ params }: { params: Promise<Params> 
   const blId = isRbId ? await blIdFor("minifig", id) : id;
   const rbId = isRbId ? id : await rbIdFor("minifig", id);
 
-  const [item, catalogFig, history, appearsIn, inCollection] = await Promise.all([
+  const [item, catalogFig, history, appearsIn, inCollection, parts] = await Promise.all([
     blId ? getItem(blId) : Promise.resolve(null),
     rbId ? getCatalogMinifig(rbId) : Promise.resolve(null),
     blId ? getPriceHistory(blId, 90) : Promise.resolve([]),
     rbId ? getFigAppearsIn(rbId) : Promise.resolve([]),
     blId ? isInMyCollection(blId) : Promise.resolve(null),
+    rbId ? getInventoryParts(rbId) : Promise.resolve([]),
   ]);
 
   const name = item?.name ?? catalogFig?.name ?? id;
@@ -164,6 +167,16 @@ export default async function MinifigPage({ params }: { params: Promise<Params> 
                   </li>
                 ))}
               </ul>
+            </section>
+          )}
+
+          {/* Part inventory */}
+          {parts.length > 0 && (
+            <section className="mt-6">
+              <h2 className="mb-2 text-base font-bold">
+                Parts ({parts.filter((p) => !p.is_spare).reduce((s, p) => s + p.quantity, 0)})
+              </h2>
+              <PartsTable parts={parts} />
             </section>
           )}
         </div>
