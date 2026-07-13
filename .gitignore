@@ -19,3 +19,18 @@ bricklink_data.db
 
 # Secrets
 .streamlit/secrets.toml
+.env.*
+!.env.example
+
+# Node / Next.js
+node_modules/
+web/.next/
+web/out/
+web/next-env.d.ts
+web/tsconfig.tsbuildinfo
+web/test-results/
+web/playwright-report/
+
+# ETL artifacts
+etl/.cache/
+*.csv.gz
