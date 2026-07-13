@@ -100,7 +100,7 @@ function matchesAny(name: string, keywords: string[]): boolean {
 export function classifyUniverse(itemId: string, name: string): "marvel" | "dc" | null {
   const lower = name.toLowerCase();
   if (MARVEL_ID_OVERRIDES.has(itemId)) return "marvel";
-  let isMarvel = matchesAny(lower, MARVEL_KEYWORDS);
+  const isMarvel = matchesAny(lower, MARVEL_KEYWORDS);
   let isDc = matchesAny(lower, DC_KEYWORDS);
   if (lower.includes("red hood") && lower.includes("spider")) isDc = false;
   if (isMarvel && !isDc) return "marvel";

@@ -11,6 +11,8 @@ import { Breadcrumbs, type Crumb } from "@/components/Breadcrumbs";
 import { PriceGuideTable } from "@/components/PriceGuideTable";
 import { PriceHistoryChart } from "@/components/PriceHistoryChart";
 import { DealBadge, ConfidencePill, LifecycleBadge } from "@/components/Badges";
+import { CollectionButton } from "@/components/CollectionButton";
+import { isInMyCollection } from "@/lib/queries/collections";
 import { blCatalogUrl, blImageUrl, ils, num, pct, shortDate } from "@/lib/format";
 
 type Params = { setNum: string };
@@ -29,11 +31,12 @@ export default async function SetPage({ params }: { params: Promise<Params> }) {
   const setNum = decodeURIComponent(raw);
   const blId = setNum.replace(/-1$/, "");
 
-  const [item, catalogSet, minifigs, history] = await Promise.all([
+  const [item, catalogSet, minifigs, history, inCollection] = await Promise.all([
     getItem(blId).then((i) => i ?? getItem(setNum)),
     getCatalogSet(setNum),
     getSetMinifigs(setNum),
     getPriceHistory(blId, 90),
+    isInMyCollection(blId),
   ]);
 
   const themePath = await getThemePath(catalogSet?.theme_id ?? null);
@@ -105,6 +108,7 @@ export default async function SetPage({ params }: { params: Promise<Params> }) {
             <h1 className="text-xl font-bold">{name}</h1>
             <LifecycleBadge lifecycle={item?.lifecycle} />
             <DealBadge rating={item?.cached_rating} />
+            <CollectionButton itemId={blId} initialInCollection={inCollection} />
           </div>
 
           {item ? (

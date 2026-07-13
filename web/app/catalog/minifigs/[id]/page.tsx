@@ -12,6 +12,8 @@ import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { PriceGuideTable } from "@/components/PriceGuideTable";
 import { PriceHistoryChart } from "@/components/PriceHistoryChart";
 import { DealBadge, ConfidencePill, LifecycleBadge } from "@/components/Badges";
+import { CollectionButton } from "@/components/CollectionButton";
+import { isInMyCollection } from "@/lib/queries/collections";
 import { blCatalogUrl, blImageUrl, ils, pct, shortDate } from "@/lib/format";
 
 type Params = { id: string };
@@ -34,11 +36,12 @@ export default async function MinifigPage({ params }: { params: Promise<Params> 
   const blId = isRbId ? await blIdFor("minifig", id) : id;
   const rbId = isRbId ? id : await rbIdFor("minifig", id);
 
-  const [item, catalogFig, history, appearsIn] = await Promise.all([
+  const [item, catalogFig, history, appearsIn, inCollection] = await Promise.all([
     blId ? getItem(blId) : Promise.resolve(null),
     rbId ? getCatalogMinifig(rbId) : Promise.resolve(null),
     blId ? getPriceHistory(blId, 90) : Promise.resolve([]),
     rbId ? getFigAppearsIn(rbId) : Promise.resolve([]),
+    blId ? isInMyCollection(blId) : Promise.resolve(null),
   ]);
 
   const name = item?.name ?? catalogFig?.name ?? id;
@@ -94,6 +97,7 @@ export default async function MinifigPage({ params }: { params: Promise<Params> 
             <h1 className="text-xl font-bold">{name}</h1>
             <LifecycleBadge lifecycle={item?.lifecycle} />
             <DealBadge rating={item?.cached_rating} />
+            {blId && <CollectionButton itemId={blId} initialInCollection={inCollection} />}
           </div>
 
           {item ? (
