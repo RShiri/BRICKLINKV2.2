@@ -1,0 +1,89 @@
+name: Database setup (migrations + catalog import)
+
+# One-shot setup you trigger by hand: applies all migrations, then loads the
+# Rebrickable catalog and builds the BrickLink id mapping. Safe to re-run
+# (every migration and import step is idempotent).
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_import:
+        description: "Also import the Rebrickable catalog (slower)"
+        type: boolean
+        default: true
+      skip_inventory_parts:
+        description: "Skip the ~1M-row inventory_parts table (faster first run)"
+        type: boolean
+        default: true
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Verify database connection
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::DATABASE_URL secret is not set. Add it in Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+          psql "$DATABASE_URL" -c "select current_user, version();"
+
+      - name: Apply migrations
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          for f in supabase/migrations/000*.sql; do
+            echo "=== applying $f ==="
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"
+          done
+
+      - uses: actions/setup-python@v5
+        if: ${{ inputs.run_import }}
+        with:
+          python-version: "3.11"
+
+      - name: Install Python deps
+        if: ${{ inputs.run_import }}
+        run: pip install psycopg2-binary requests
+
+      - name: Import Rebrickable catalog
+        if: ${{ inputs.run_import }}
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ "${{ inputs.skip_inventory_parts }}" = "true" ]; then
+            python -m etl.import_rebrickable --skip-inventory-parts
+          else
+            python -m etl.import_rebrickable
+          fi
+
+      - name: Map BrickLink <-> Rebrickable ids
+        if: ${{ inputs.run_import }}
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python -m etl.map_bricklink_ids
+
+      - name: Backfill promoted item columns
+        if: ${{ inputs.run_import }}
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python -m etl.backfill_item_columns
+
+      - name: Summary
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          echo "### Setup complete" >> $GITHUB_STEP_SUMMARY
+          psql "$DATABASE_URL" -t -c "select 'themes: '||count(*) from themes" >> $GITHUB_STEP_SUMMARY 2>/dev/null || true
+          psql "$DATABASE_URL" -t -c "select 'catalog_sets: '||count(*) from catalog_sets" >> $GITHUB_STEP_SUMMARY 2>/dev/null || true
+          psql "$DATABASE_URL" -t -c "select 'catalog_minifigs: '||count(*) from catalog_minifigs" >> $GITHUB_STEP_SUMMARY 2>/dev/null || true
+          psql "$DATABASE_URL" -t -c "select 'id mappings: '||count(*) from external_id_map" >> $GITHUB_STEP_SUMMARY 2>/dev/null || true
+          psql "$DATABASE_URL" -t -c "select 'priced items: '||count(*) from items where guide is not null" >> $GITHUB_STEP_SUMMARY 2>/dev/null || true

@@ -177,6 +177,7 @@ class Database:
             conf_new = analysis.get("new", {}).get("confidence", "N/A")
             conf_used = analysis.get("used", {}).get("confidence", "N/A")
         except:
+            analysis = None
             rating, profit, margin = "N/A", 0, 0
             price_new, price_used = 0, 0
             conf_new, conf_used = "N/A", "N/A"
@@ -194,6 +195,31 @@ class Database:
                     cached_margin = EXCLUDED.cached_margin;
             '''
             self.cursor.execute(query, (item_id, json_str, now, rating, profit, margin))
+
+            # Promoted columns for the web app (migration 0002). Guarded with a
+            # savepoint so a database created before that migration keeps working.
+            if analysis is not None:
+                self.cursor.execute("SAVEPOINT promoted_cols")
+                try:
+                    from psycopg2.extras import Json
+                    from etl.promote import promoted_columns
+                    cols = promoted_columns(item_id, data, analysis)
+                    self.cursor.execute('''
+                        UPDATE items SET
+                            item_type = %s, name = %s, year_released = %s,
+                            price_new = %s, price_used = %s,
+                            confidence_new = %s, confidence_used = %s,
+                            buy_target = %s, lifecycle = %s, guide = %s
+                        WHERE item_id = %s
+                    ''', (cols["item_type"], cols["name"], cols["year_released"],
+                          cols["price_new"], cols["price_used"],
+                          cols["confidence_new"], cols["confidence_used"],
+                          cols["buy_target"], cols["lifecycle"], Json(cols["guide"]),
+                          item_id))
+                    self.cursor.execute("RELEASE SAVEPOINT promoted_cols")
+                except Exception as e:
+                    self.cursor.execute("ROLLBACK TO SAVEPOINT promoted_cols")
+                    logging.warning(f"Promoted-column update skipped for {item_id}: {e}")
 
             history_query = '''
                 INSERT INTO price_history (item_id, price_new, price_used, confidence_new, confidence_used, scraped_at)

@@ -188,30 +188,10 @@ class BrickLinkScraper:
                 q_idx, p_idx = (-2, -1) if table_type == "sold" else (1, 2)
                 p_text = tds[p_idx].get_text(strip=True).replace(',', '')
                 
-                # Currency Detection
-                rate = 1.0
-                p_upper = p_text.upper()
-                
-                CURRENCY_RATES = {
-                    'US': 3.20, 'USD': 3.20, '$': 3.20,  # Fallback $ to USD if no other prefix
-                    'EU': 3.95, 'EUR': 3.95, '€': 3.95,
-                    'GB': 4.65, 'GBP': 4.65, '£': 4.65,
-                    'CA': 2.60, 'CAD': 2.60,
-                    'AU': 2.35, 'AUD': 2.35,
-                    'IL': 1.00, 'ILS': 1.00, '₪': 1.00 
-                }
-
-                # Specific checks (Longer strings first)
-                if 'ILS' in p_upper or '₪' in p_upper: rate = 1.0
-                elif 'US' in p_upper: rate = CURRENCY_RATES['US']
-                elif 'CA' in p_upper: rate = CURRENCY_RATES['CA']
-                elif 'AU' in p_upper: rate = CURRENCY_RATES['AU']
-                elif 'EU' in p_upper or '€' in p_upper: rate = CURRENCY_RATES['EU']
-                elif 'GB' in p_upper or '£' in p_upper: rate = CURRENCY_RATES['GB']
-                elif '$' in p_upper: rate = CURRENCY_RATES['$'] # Fallback
-                
+                # Currency detection + conversion (live rates with fallback)
+                from etl.currency import convert_to_ils, detect_currency
                 raw_val = float(re.sub(r'[^\d.]', '', p_text))
-                final_price = raw_val * rate
+                final_price = convert_to_ils(raw_val, detect_currency(p_text))
 
                 rows.append({
                     'qty': int(re.sub(r'[^\d]', '', tds[q_idx].get_text(strip=True))),
