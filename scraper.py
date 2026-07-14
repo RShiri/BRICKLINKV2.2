@@ -8,6 +8,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup, Tag
 from database import Database
+from bricklink_parsing import row_is_incomplete, row_description
 
 class BrickLinkScraper:
     BASE_URL = "https://www.bricklink.com/v2/catalog/catalogitem.page"
@@ -178,16 +179,14 @@ class BrickLinkScraper:
             tds = tr.find_all('td')
             if len(tds) < 2: continue
             
-            is_inc = False
-            # 1. זיהוי לפי CSS Class (השיטה הכי אמינה ל-AJAX)
-            if tr.find(class_="js-item-status-incomplete") or "(i)" in tr.get_text().lower():
-                is_inc = True
+            # Incomplete-set detection (shared + robust) — see bricklink_parsing
+            is_inc = row_is_incomplete(tr)
 
             try:
                 # 2. Extract Price & Convert to ILS
                 q_idx, p_idx = (-2, -1) if table_type == "sold" else (1, 2)
                 p_text = tds[p_idx].get_text(strip=True).replace(',', '')
-                
+
                 # Currency detection + conversion (live rates with fallback)
                 from etl.currency import convert_to_ils, detect_currency
                 raw_val = float(re.sub(r'[^\d.]', '', p_text))
@@ -197,7 +196,8 @@ class BrickLinkScraper:
                     'qty': int(re.sub(r'[^\d]', '', tds[q_idx].get_text(strip=True))),
                     'price': round(final_price, 2),
                     'currency': 'ILS', # Normalized
-                    'status': "incomplete" if is_inc else "complete"
+                    'status': "incomplete" if is_inc else "complete",
+                    'description': row_description(tr),  # text for keyword filter
                 })
             except: continue
         return rows

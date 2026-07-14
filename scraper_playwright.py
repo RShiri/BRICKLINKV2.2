@@ -4,6 +4,7 @@ from typing import Dict, Any, List
 import re
 from datetime import datetime
 from database import Database
+from bricklink_parsing import row_is_incomplete, row_description
 import logging
 
 class BrickLinkScraperV2:
@@ -196,16 +197,14 @@ class BrickLinkScraperV2:
             if len(tds) < 2:
                 continue
             
-            # Check for incomplete status
-            is_inc = False
-            if tr.find(class_="js-item-status-incomplete") or "(i)" in tr.get_text().lower():
-                is_inc = True
+            # Incomplete-set detection (shared + robust) — see bricklink_parsing
+            is_inc = row_is_incomplete(tr)
 
             try:
                 # Extract price and quantity based on table type
                 q_idx, p_idx = (-2, -1) if table_type == "sold" else (1, 2)
                 p_text = tds[p_idx].get_text(strip=True).replace(',', '')
-                
+
                 # Currency detection + conversion (live rates with fallback)
                 from etl.currency import convert_to_ils, detect_currency
                 raw_val = float(re.sub(r'[^\d.]', '', p_text))
@@ -215,7 +214,8 @@ class BrickLinkScraperV2:
                     'qty': int(re.sub(r'[^\d]', '', tds[q_idx].get_text(strip=True))),
                     'price': round(final_price, 2),
                     'currency': 'ILS',
-                    'status': "incomplete" if is_inc else "complete"
+                    'status': "incomplete" if is_inc else "complete",
+                    'description': row_description(tr),  # text for keyword filter
                 })
             except:
                 continue

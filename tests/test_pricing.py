@@ -105,6 +105,48 @@ class TestRatings:
             assert sniper["rating"] == "IRRELEVANT"
 
 
+def scraped_listing(price, qty=1, status="complete", description=""):
+    """Mirror the exact dict shape the scrapers now emit (incl. currency +
+    row-text description) so we test the real live-data path, not just the
+    hand-written test shape."""
+    return {"qty": qty, "price": price, "currency": "ILS",
+            "status": status, "description": description}
+
+
+class TestIncompleteSetsExcluded:
+    """End-to-end: incomplete sets must never contribute to the used price."""
+
+    def test_incomplete_flag_excluded_from_used_price(self):
+        # 3 complete + 3 incomplete used sales. The incomplete ones must
+        # contribute nothing, so the mixed price equals the complete-only price.
+        complete = [scraped_listing(100, description="Store 1 US $100")] * 3
+        junk = [scraped_listing(5, status="incomplete",
+                                description="Store 1 US $5 (i)")] * 3
+        mixed = PriceAnalyzer(make_data(used_sold=complete + junk)).analyze()
+        clean = PriceAnalyzer(make_data(used_sold=complete)).analyze()
+        assert mixed["used"]["market_price"] == clean["used"]["market_price"]
+        assert mixed["used"]["market_price"] > 0
+
+    def test_incomplete_only_yields_no_used_price(self):
+        used = [scraped_listing(5, status="incomplete") for _ in range(4)]
+        result = PriceAnalyzer(make_data(used_sold=used)).analyze()
+        assert result["used"]["market_price"] == 0
+
+    def test_row_text_keyword_excluded(self):
+        # A listing flagged complete but whose visible row text says
+        # "no minifigs" is still dropped by the keyword filter.
+        data = make_data(new_sold=[scraped_listing(
+            100, description="BrickShop no minifigs 1 US $100")])
+        result = PriceAnalyzer(data).analyze()
+        assert result["new"]["market_price"] == 0
+
+    def test_clean_scraped_listings_priced(self):
+        data = make_data(new_sold=[scraped_listing(100, description="Store 1 US $100"),
+                                   scraped_listing(110, description="Store 1 US $110")])
+        result = PriceAnalyzer(data).analyze()
+        assert result["new"]["market_price"] > 0
+
+
 class TestConfidenceLevels:
     def test_high_confidence_with_ten_sold(self):
         # status='complete' required to pass _process_dataset's internal check

@@ -48,6 +48,7 @@ BrickLink Sniper
 ├── dashboard.py          # Main Streamlit app — UI, routing, analysis orchestration
 ├── database.py           # SQLite layer with connection pooling and schema management
 ├── scraper.py            # Selenium/BeautifulSoup scraper for BrickLink price data
+├── bricklink_parsing.py  # Shared price-guide row parsing + incomplete-set detection
 ├── pricing_engine.py     # Statistical price analysis, outlier filtering, sniper scoring
 ├── currency_converter.py # Exchange rate utilities (USD → ILS)
 ├── pages/
@@ -124,7 +125,7 @@ Dashboard renders report, minifig gallery, investment metrics
 
 `PriceAnalyzer` applies a multi-layer filtering pipeline before computing any price:
 
-1. **Completeness filter** — removes listings flagged as incomplete via a keyword blacklist and regex patterns (e.g., "no minifigs", "build only", "missing parts").
+1. **Completeness filter** — drops incomplete sets so they never skew a price. Detection happens in two places: the scraper flags each price-guide row via the shared `bricklink_parsing.row_is_incomplete()` (BrickLink's incomplete class on the row *or* a descendant, plus the `(i)` / "incomplete" text markers) and stores the row's text; the engine then removes anything flagged incomplete or matching a keyword blacklist / regex (e.g., "no minifigs", "build only", "missing parts").
 2. **Bulk seller filter** — excludes sellers listing 3+ identical items (likely dealers, not representative market).
 3. **IQR outlier removal** — drops prices outside `[Q1 - 1.5×IQR, Q3 + 1.5×IQR]`.
 4. **Market price** — weighted mean of remaining sold prices.
@@ -215,6 +216,7 @@ The `pages/` directory contains superhero-specific minifigure browsers (`1_🦸_
 | `dashboard.py` | App entry point, all UI logic |
 | `database.py` | `Database` class + SQLite connection pool |
 | `scraper.py` | `BrickLinkScraper` — Selenium driver + HTML parsing |
+| `bricklink_parsing.py` | Shared price-guide row parsing + `row_is_incomplete()` detection |
 | `pricing_engine.py` | `PriceAnalyzer` — statistical price calculation |
 | `currency_converter.py` | USD → ILS conversion |
 | `pages/1_🦸_Marvel.py` | Marvel minifig browser |
